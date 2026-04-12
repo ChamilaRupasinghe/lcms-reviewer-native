@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}Specimen {{ specimen.accession }}{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <div>
+    <span class="eyebrow">Specimen dashboard</span>
+    <h2>Specimen {{ specimen.accession }}</h2>
+    <p>Run <a href="{{ url_for('run_detail', run_id=specimen.run.id) }}">#{{ specimen.run.id }} — {{ specimen.run.label }}</a> · Instrument {{ specimen.instrument or 'n/a' }} · Batch {{ specimen.batch_name or 'n/a' }}</p>
+  </div>
+  <div class="action-row">
+    {% if specimen.highest_severity %}<span class="severity {{ specimen.highest_severity }}">{{ severity_labels.get(specimen.highest_severity, specimen.highest_severity) }}</span>{% else %}<span class="pill ok">No rule flag</span>{% endif %}
+    <span class="pill">{{ specimen.flag_count }} flag(s)</span>
+    <span class="pill">{{ analyte_counts.positive }} positive analyte(s)</span>
+    <span class="pill">{{ suspect_peak_cards|length }} review note(s)</span>
+  </div>
+</section>
+
+<section class="card-grid compact-gap">
+  <article class="stat-card accent-blue"><span class="eyebrow">Positive analytes</span><strong>{{ analyte_counts.positive }}</strong><small>Above panel cutoffs</small></article>
+  <article class="stat-card accent-violet"><span class="eyebrow">High positives</span><strong>{{ analyte_counts.high }}</strong><small>≥ 5× cutoff</small></article>
+  <article class="stat-card accent-teal"><span class="eyebrow">Trace detections</span><strong>{{ analyte_counts.trace }}</strong><small>Below cutoff but detected</small></article>
+  <article class="stat-card danger"><span class="eyebrow">Very high signals</span><strong>{{ analyte_counts.extreme }}</strong><small>≥ 20× cutoff</small></article>
+</section>
+
+<section class="two-col">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Specimen summary</h2>
+      <span class="pill">Accession-based review</span>
+    </div>
+    <dl class="meta-grid">
+      <dt>Source file</dt><dd>{{ specimen.source_file }}</dd>
+      <dt>Run date</dt><dd>{{ specimen.run_date_text }}</dd>
+      <dt>Positive analytes</dt><dd>{{ specimen.positive_analytes or 'None above panel cutoffs' }}</dd>
+    </dl>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Flags on this specimen</h2>
+      <span class="pill">Click the rule logic below</span>
+    </div>
+    {% if flags %}
+      <div class="stack-list">
+        {% for flag in flags %}
+          <details class="flag-box {{ flag.severity }}">
+            <summary class="flag-summary">
+              <span class="severity {{ flag.severity }}">{{ flag.severity }}</span>
+              <strong>{{ flag.flag_title }}</strong>
+            </summary>
+            <p><strong>Rule code:</strong> {{ flag.rule_code }}</p>
+            <p><strong>Analytes:</strong> {{ flag.analyte_a }} {{ flag.value_a|num }}{% if flag.analyte_b %} / {{ flag.analyte_b }} {{ flag.value_b|num }}{% endif %}</p>
+            {% if flag.ratio_name %}<p><strong>{{ flag.ratio_name }}:</strong> {{ flag.ratio_value|ratio }}</p>{% endif %}
+            <p><strong>Logic:</strong> {{ rule_lookup[flag.rule_code]['logic'] if flag.rule_code in rule_lookup else 'Stored review rule' }}</p>
+            <p><strong>Comment:</strong> {{ flag.comment }}</p>
+          </details>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">This specimen did not trigger any current mismatch rule.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Suspect / wrong-peak review notes</h2>
+    <span class="pill">Level-based reviewer aid</span>
+  </div>
+  {% if suspect_peak_cards %}
+    <div class="review-note-grid">
+      {% for card in suspect_peak_cards %}
+        <div class="flag-box {{ card.severity }}">
+          <div class="flag-top">
+            <span class="severity {{ card.severity }}">{{ card.source }}</span>
+            <strong>{{ card.title }}</strong>
+          </div>
+          <p>{{ card.summary }}</p>
+          {% if card.detail %}<p class="muted-copy">{{ card.detail }}</p>{% endif %}
+          <p><strong>Why review:</strong> {{ card.logic }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No additional suspect-peak review notes were generated for this specimen.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Detected analytes</h2>
+    <div class="control-row">
+      <input id="analyte-search" class="search-input" type="search" placeholder="Search analyte name">
+      <span class="pill">Color shows level vs cutoff</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Analyte</th><th>Value</th><th>Cutoff</th><th>Level</th><th>Relative to cutoff</th><th>Above cutoff</th></tr>
+      </thead>
+      <tbody id="analyte-table-body">
+        {% for analyte in analytes %}
+          <tr data-severity="{{ analyte.tone }}">
+            <td>{{ analyte.analyte }}</td>
+            <td>{{ analyte.value|num }}</td>
+            <td>{{ analyte.cutoff|num }}</td>
+            <td><span class="pill level-pill {{ analyte.tone }}">{{ analyte.label }}</span></td>
+            <td>{{ analyte.display_multiplier }}</td>
+            <td>{% if analyte.is_positive %}<span class="pill ok">yes</span>{% else %}<span class="pill">detected</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Practical review reminders</h2>
+    <span class="pill">Helpful when evaluating possible wrong peaks</span>
+  </div>
+  <div class="rule-grid">
+    {% for item in review_scenarios %}
+      <div class="rule-card info static-card">
+        <strong>{{ item.label }}</strong>
+        <p>{{ item.explanation }}</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  bindTableSearch('analyte-search', '#analyte-table-body tr', 'td');
+</script>
+{% endblock %}

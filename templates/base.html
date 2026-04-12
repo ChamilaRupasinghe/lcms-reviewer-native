@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}LCMS Reviewer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-row">
+      <div>
+        <h1><a href="{{ url_for('dashboard') }}">LCMS Parent-Metabolite Reviewer</a></h1>
+        <p class="subhead">Color-coded, accession-based toxicology review for LCMS1 and LCMS2 positive panel exports with clickable drill-downs, downloadable outputs, and persistent storage.</p>
+      </div>
+      <nav class="top-nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('health') }}">Health</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page-body">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    function bindTableSearch(inputId, rowSelector, textSelector) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const rows = Array.from(document.querySelectorAll(rowSelector));
+      input.addEventListener('input', () => {
+        const query = input.value.toLowerCase().trim();
+        rows.forEach((row) => {
+          const targets = textSelector ? Array.from(row.querySelectorAll(textSelector)) : [row];
+          const haystack = targets.map((node) => node.textContent.toLowerCase()).join(' ');
+          row.style.display = haystack.includes(query) ? '' : 'none';
+        });
+      });
+    }
+
+    function bindDataFilter(buttonSelector, rowSelector, attributeName) {
+      const buttons = Array.from(document.querySelectorAll(buttonSelector));
+      if (!buttons.length) return;
+      const rows = Array.from(document.querySelectorAll(rowSelector));
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const wanted = button.dataset.filter || 'all';
+          buttons.forEach((item) => item.classList.remove('active'));
+          button.classList.add('active');
+          rows.forEach((row) => {
+            const rowValue = row.dataset[attributeName] || 'all';
+            row.style.display = (wanted === 'all' || rowValue === wanted) ? '' : 'none';
+          });
+        });
+      });
+    }
+  </script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

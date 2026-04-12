@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+{% block title %}Run {{ run.id }}{% endblock %}
+{% block content %}
+<section class="page-intro run-header {{ run_status }}">
+  <div>
+    <span class="eyebrow">Saved review run</span>
+    <h2>Run #{{ run.id }} — {{ run.label }}</h2>
+    <p>Saved {{ run.created_at.strftime('%Y-%m-%d %H:%M UTC') }}. This run stays available after restart because the uploaded files, report outputs, and structured review data are written to persistent storage and indexed in the database.</p>
+  </div>
+  <div class="action-row">
+    <a class="button-link" href="{{ url_for('download_asset', run_id=run.id, asset='report') }}">HTML report</a>
+    <a class="button-link" href="{{ url_for('download_asset', run_id=run.id, asset='flags') }}">Flags CSV</a>
+    <a class="button-link" href="{{ url_for('download_asset', run_id=run.id, asset='summary') }}">Accession CSV</a>
+    <a class="button-link" href="{{ url_for('download_asset', run_id=run.id, asset='bundle') }}">ZIP bundle</a>
+  </div>
+</section>
+
+<section class="card-grid">
+  <article class="stat-card accent-blue"><span class="eyebrow">Files</span><strong>{{ run.file_count }}</strong><small>Uploaded batch exports</small></article>
+  <article class="stat-card accent-green"><span class="eyebrow">Accessions</span><strong>{{ run.accession_count }}</strong><small>Pivoted one row per accession</small></article>
+  <article class="stat-card accent-violet"><span class="eyebrow">Flagged accessions</span><strong>{{ run.flagged_accession_count }}</strong><small>Click any accession to inspect</small></article>
+  <article class="stat-card danger"><span class="eyebrow">Red flags</span><strong>{{ run.red_count }}</strong><small>Immediate review</small></article>
+  <article class="stat-card warn"><span class="eyebrow">Amber flags</span><strong>{{ run.amber_count }}</strong><small>Review recommended</small></article>
+</section>
+
+<section class="two-col">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Reviewer queue</h2>
+      <span class="pill">Top flagged specimens</span>
+    </div>
+    {% if flagged_specimens %}
+      <div class="stack-list">
+        {% for specimen in flagged_specimens %}
+          <a class="flag-link" href="{{ url_for('specimen_detail', specimen_id=specimen.id) }}">
+            <div class="flag-box {{ specimen.highest_severity or 'info' }} compact-card">
+              <div class="flag-top">
+                {% if specimen.highest_severity %}<span class="severity {{ specimen.highest_severity }}">{{ specimen.highest_severity }}</span>{% endif %}
+                <strong>{{ specimen.accession }}</strong>
+                <span class="pill">{{ specimen.flag_count }} flag(s)</span>
+              </div>
+              <p>{{ specimen.positive_analytes or 'No positive analytes listed' }}</p>
+              <p class="muted-copy">{{ specimen.instrument or 'Unknown instrument' }} · {{ specimen.batch_name or 'No batch name' }}</p>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No flagged specimens in this run.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Most common rules in this run</h2>
+      <span class="pill">Clickable interpretation aid</span>
+    </div>
+    {% if top_rules %}
+      <div class="stack-list">
+        {% for rule in top_rules %}
+          <div class="flag-box {{ rule.severity }} compact-card">
+            <div class="flag-top">
+              <span class="severity {{ rule.severity }}">{{ rule.severity }}</span>
+              <strong>{{ rule.title }}</strong>
+              <span class="pill">{{ rule.count }}</span>
+            </div>
+            <p>{{ rule.logic }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No active rules fired in this run.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="three-col-grid">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Uploaded files</h2>
+      <span class="pill">{{ files|length }} file(s)</span>
+    </div>
+    <ul class="file-list">
+      {% for file in files %}
+        <li>{{ file.original_name }}</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>LCMS1 vs LCMS2 split</h2>
+      <span class="pill">Instrument dashboard</span>
+    </div>
+    {% if instrument_summary %}
+      <div class="stack-list">
+        {% for row in instrument_summary %}
+          <div class="mini-card">
+            <div class="section-head compact">
+              <strong>{{ row.instrument }}</strong>
+              <span class="pill">{{ row.flag_rate|pct }} flagged</span>
+            </div>
+            <dl class="mini-metrics">
+              <dt>Specimens</dt><dd>{{ row.specimens }}</dd>
+              <dt>Flagged</dt><dd>{{ row.flagged }}</dd>
+              <dt>Red</dt><dd class="text-red">{{ row.red }}</dd>
+              <dt>Amber</dt><dd class="text-amber">{{ row.amber }}</dd>
+            </dl>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No instrument breakdown available.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Metabolite-only patterns</h2>
+      <span class="pill">Accepted but tracked</span>
+    </div>
+    {% if patterns %}
+      <div class="stack-list">
+        {% for item in patterns %}
+          <div class="mini-card">
+            <strong>{{ item.pattern }}</strong>
+            <p class="muted-copy">{{ item.count }} specimen(s)</p>
+            <p>{{ item.interpretation }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No metabolite-only patterns stored for this run.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Local ratio reference bands</h2>
+    <span class="pill">Dataset-specific anchors</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Pair</th><th>N</th><th>P05</th><th>Median</th><th>P95</th></tr>
+      </thead>
+      <tbody>
+        {% for ref in refs %}
+          <tr>
+            <td>{{ ref.pair_label }}</td>
+            <td>{{ ref.n_value }}</td>
+            <td>{{ ref.p05|ratio }}</td>
+            <td>{{ ref.median|ratio }}</td>
+            <td>{{ ref.p95|ratio }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="flagged-accessions">
+  <div class="section-head">
+    <h2>Flagged accessions</h2>
+    <div class="control-row">
+      <input id="flag-search" class="search-input" type="search" placeholder="Search accession, rule, analyte, comment">
+      <div class="filter-chips">
+        <button class="filter-chip active" data-filter="all" type="button">All</button>
+        <button class="filter-chip red" data-filter="red" type="button">Red</button>
+        <button class="filter-chip amber" data-filter="amber" type="button">Amber</button>
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Accession</th>
+          <th>Rule</th>
+          <th>Analytes</th>
+          <th>Ratio</th>
+          <th>Comment</th>
+        </tr>
+      </thead>
+      <tbody id="flagged-table-body">
+        {% for flag in flags %}
+          <tr data-severity="{{ flag.severity }}">
+            <td><span class="severity {{ flag.severity }}">{{ flag.severity }}</span></td>
+            <td><a href="{{ url_for('specimen_detail', specimen_id=flag.specimen.id) }}">{{ flag.specimen.accession }}</a></td>
+            <td>{{ flag.flag_title }}</td>
+            <td>{{ flag.analyte_a }} {{ flag.value_a|num }}{% if flag.analyte_b %} / {{ flag.analyte_b }} {{ flag.value_b|num }}{% endif %}</td>
+            <td>{% if flag.ratio_name %}{{ flag.ratio_name }} = {{ flag.ratio_value|ratio }}{% endif %}</td>
+            <td>{{ flag.comment }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Practical parent / metabolite review guide</h2>
+    <span class="pill">For wrong-peak or mismatch review</span>
+  </div>
+  <div class="rule-grid">
+    {% for item in review_scenarios %}
+      <div class="rule-card info static-card">
+        <strong>{{ item.label }}</strong>
+        <p>{{ item.explanation }}</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>All specimens in this run</h2>
+    <div class="control-row">
+      <input id="specimen-search" class="search-input" type="search" placeholder="Search accession, instrument, analytes">
+      <span class="pill">Click accession for specimen dashboard</span>
+    </div>
+  </div>
+  <div class="table-wrap tall">
+    <table>
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Instrument</th>
+          <th>Batch</th>
+          <th>Flags</th>
+          <th>Severity</th>
+          <th>Positive analytes</th>
+        </tr>
+      </thead>
+      <tbody id="specimen-table-body">
+        {% for specimen in specimens %}
+          <tr data-severity="{{ specimen.highest_severity or 'ok' }}">
+            <td><a href="{{ url_for('specimen_detail', specimen_id=specimen.id) }}">{{ specimen.accession }}</a></td>
+            <td>{{ specimen.instrument }}</td>
+            <td>{{ specimen.batch_name }}</td>
+            <td>{{ specimen.flag_count }}</td>
+            <td>{% if specimen.highest_severity %}<span class="severity {{ specimen.highest_severity }}">{{ specimen.highest_severity }}</span>{% else %}<span class="pill ok">ok</span>{% endif %}</td>
+            <td>{{ specimen.positive_analytes }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  bindTableSearch('flag-search', '#flagged-table-body tr', 'td');
+  bindTableSearch('specimen-search', '#specimen-table-body tr', 'td');
+  bindDataFilter('#flagged-accessions .filter-chip', '#flagged-table-body tr', 'severity');
+</script>
+{% endblock %}

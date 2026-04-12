@@ -1,0 +1,748 @@
+{% extends 'base.html' %}
+{% block title %}LCMS Reviewer Dashboard{% endblock %}
+{% block content %}
+<section class="hero-panel">
+  <div class="hero-copy">
+    <span class="eyebrow">Reviewer home</span>
+    <h2>Fast, color-coded LCMS review</h2>
+    <p>Use this dashboard to upload batches, open prior runs, triage red and amber mismatches, and drill into accession-level analyte patterns. Each accession is clickable so reviewers can move from dashboard to specimen detail without hunting through spreadsheets.</p>
+    <div class="legend-row">
+      <span class="severity red">Red = immediate review</span>
+      <span class="severity amber">Amber = review recommended</span>
+      <span class="severity info">Blue = pattern insight</span>
+      <span class="pill ok">Green = within practical expectations</span>
+    </div>
+  </div>
+  <div class="panel hero-side upload-panel-inline">
+    <div class="section-head compact">
+      <h3>Upload new LCMS Excel batches</h3>
+      <span class="pill">.xlsx only</span>
+    </div>
+    <p class="muted-copy">The reviewer keeps accessions starting with <strong>T</strong>, preserves reruns such as <strong>-rr</strong>, pivots each accession into one row, and applies parent/metabolite review rules automatically.</p>
+    <form action="{{ url_for('upload_files') }}" method="post" enctype="multipart/form-data" class="upload-form">
+      <label>Run label
+        <input type="text" name="label" placeholder="Example: April 8 LCMS2 review">
+      </label>
+      <label>Select Excel files
+        <input type="file" name="files" multiple accept=".xlsx">
+      </label>
+      <button type="submit">Analyze and save run</button>
+    </form>
+  </div>
+</section>
+
+<section class="dashboard-tabs">
+  <button class="dashboard-tab active" type="button" data-target="dashboard-overview-panel">Overview</button>
+  <button class="dashboard-tab" type="button" data-target="dashboard-heatmap-panel">Heatmap</button>
+</section>
+
+<div id="dashboard-overview-panel" class="dashboard-tab-panel active">
+<section class="card-grid compact-gap">
+  <article class="stat-card accent-blue">
+    <span class="eyebrow">Saved runs</span>
+    <strong>{{ totals.runs }}</strong>
+    <small>Persistent after restart</small>
+  </article>
+  <article class="stat-card accent-green">
+    <span class="eyebrow">Specimens reviewed</span>
+    <strong>{{ totals.specimens }}</strong>
+    <small>Accession-based rows</small>
+  </article>
+  <article class="stat-card accent-violet">
+    <span class="eyebrow">Total flags</span>
+    <strong>{{ totals.flags }}</strong>
+    <small>Rule-based mismatch queue</small>
+  </article>
+  <article class="stat-card danger">
+    <span class="eyebrow">Red flags</span>
+    <strong>{{ totals.red }}</strong>
+    <small>Immediate review</small>
+  </article>
+  <article class="stat-card warn">
+    <span class="eyebrow">Amber flags</span>
+    <strong>{{ totals.amber }}</strong>
+    <small>Review recommended</small>
+  </article>
+</section>
+
+{% if quick_actions %}
+<section class="quick-action-grid">
+  {% for action in quick_actions %}
+    <a class="quick-action {{ action.tone }}" href="{{ action.href }}">
+      <span class="eyebrow">Quick action</span>
+      <strong>{{ action.title }}</strong>
+      <span>{{ action.description }}</span>
+    </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="two-col">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Instrument activity</h2>
+      <span class="pill">LCMS1 vs LCMS2 visibility</span>
+    </div>
+    {% if instrument_summary %}
+      <div class="instrument-grid">
+        {% for row in instrument_summary %}
+          <div class="mini-card">
+            <div class="section-head compact">
+              <strong>{{ row.instrument }}</strong>
+              <span class="pill">{{ row.flag_rate|pct }} flagged</span>
+            </div>
+            <dl class="mini-metrics">
+              <dt>Specimens</dt><dd>{{ row.specimens }}</dd>
+              <dt>Flagged</dt><dd>{{ row.flagged }}</dd>
+              <dt>Red</dt><dd class="text-red">{{ row.red }}</dd>
+              <dt>Amber</dt><dd class="text-amber">{{ row.amber }}</dd>
+            </dl>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">Upload a run to populate instrument-level dashboard cards.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Most frequent flagged rules</h2>
+      <span class="pill">Helps spot recurring issues</span>
+    </div>
+    {% if hot_rules %}
+      <div class="stack-list">
+        {% for rule in hot_rules %}
+          <div class="flag-box {{ rule.severity }}">
+            <div class="flag-top">
+              <span class="severity {{ rule.severity }}">{{ rule.severity }}</span>
+              <strong>{{ rule.title }}</strong>
+              <span class="pill">{{ rule.count }} specimen(s)</span>
+            </div>
+            <p>{{ rule.logic }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No stored flags yet.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="two-col">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Recent runs</h2>
+      <div class="control-row">
+        <input id="run-search" class="search-input" type="search" placeholder="Search by run label or ID">
+        <span class="pill">Click a run to open</span>
+      </div>
+    </div>
+    {% if recent_runs %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Created</th>
+              <th>Files</th>
+              <th>Accessions</th>
+              <th>Flagged</th>
+              <th>Red</th>
+              <th>Amber</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for run in recent_runs %}
+              {% set tone = 'red' if run.red_count else ('amber' if run.amber_count else 'ok') %}
+              <tr data-severity="{{ tone }}">
+                <td><a href="{{ url_for('run_detail', run_id=run.id) }}">#{{ run.id }} — {{ run.label }}</a></td>
+                <td>{{ run.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+                <td>{{ run.file_count }}</td>
+                <td>{{ run.accession_count }}</td>
+                <td>{{ run.flagged_accession_count }}</td>
+                <td>{{ run.red_count }}</td>
+                <td>{{ run.amber_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No runs saved yet. Upload one or more batch exports to start.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Latest flagged specimens</h2>
+      <div class="filter-chips">
+        <button class="filter-chip active" data-filter="all" type="button">All</button>
+        <button class="filter-chip red" data-filter="red" type="button">Red</button>
+        <button class="filter-chip amber" data-filter="amber" type="button">Amber</button>
+      </div>
+    </div>
+    {% if latest_flags %}
+      <div class="stack-list" id="latest-flag-list">
+        {% for flag in latest_flags %}
+          <a class="flag-link" href="{{ url_for('specimen_detail', specimen_id=flag.specimen.id) }}">
+            <div class="flag-box {{ flag.severity }}" data-severity="{{ flag.severity }}">
+              <div class="flag-top">
+                <span class="severity {{ flag.severity }}">{{ flag.severity }}</span>
+                <strong>{{ flag.specimen.accession }}</strong>
+                <span class="pill">{{ flag.specimen.instrument or 'Unknown instrument' }}</span>
+              </div>
+              <p><strong>{{ flag.flag_title }}</strong></p>
+              <p>{{ flag.comment }}</p>
+              {% if flag.ratio_name %}<p class="muted-copy">{{ flag.ratio_name }} = {{ flag.ratio_value|ratio }}</p>{% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No flags stored yet.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="panel" id="rule-catalog">
+  <div class="section-head">
+    <h2>Current rule catalog</h2>
+    <span class="pill">Conservative reviewer logic</span>
+  </div>
+  <div class="rule-grid">
+    {% for rule in rule_catalog %}
+      <details class="rule-card {{ rule.severity }}">
+        <summary>
+          <span class="severity {{ rule.severity }}">{{ rule.severity }}</span>
+          <strong>{{ rule.title }}</strong>
+        </summary>
+        <p><strong>Logic:</strong> {{ rule.logic }}</p>
+        <p><strong>Why it matters:</strong> {{ rule.rationale }}</p>
+      </details>
+    {% endfor %}
+  </div>
+</section>
+</div>
+
+<section id="dashboard-heatmap-panel" class="panel dashboard-tab-panel">
+  <div class="section-head">
+    <h2>96-well heatmap preview</h2>
+    <span class="pill">First visible version</span>
+  </div>
+  <p class="muted-copy">This preview tab renders a simple 8×12 plate from saved run data. It uses stored <code>well_position</code> values when available. If a run has no mapped A1-H12 positions yet, the grid will still appear but remain blank.</p>
+
+  {% if recent_runs %}
+  <div class="heatmap-toolbar">
+    <label>Run
+      <select id="heatmap-run-select">
+      <option value="">Choose a run...</option>
+      {% for item in heatmap_runs %}
+      <option value="{{ item.id }}">{{ item.label }}</option>
+      {% endfor %}
+    </select>
+    </label>
+
+    <label>Analyte
+      <select id="heatmap-analyte-select" disabled>
+        <option value="">Choose an analyte</option>
+      </select>
+    </label>
+
+    <button id="heatmap-load-btn" type="button">Load heatmap</button>
+  </div>
+
+  <div class="heatmap-legend">
+    <span class="legend-chip empty">Empty</span>
+    <span class="legend-chip low">&lt; 50% cutoff</span>
+    <span class="legend-chip green">≈ 50% cutoff</span>
+    <span class="legend-chip orange">At cutoff</span>
+    <span class="legend-chip red">High positive</span>
+  </div>
+
+  <p id="heatmap-status" class="muted-copy">Choose a run to load analytes.</p>
+  <div id="heatmap-grid" class="heatmap-grid"></div>
+  {% else %}
+  <p class="empty">No runs saved yet. Upload a batch to enable the heatmap preview.</p>
+  {% endif %}
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  bindTableSearch('run-search', 'table tbody tr', 'td');
+  bindDataFilter('.filter-chip', '#latest-flag-list .flag-box', 'severity');
+
+  const dashboardTabs = Array.from(document.querySelectorAll('.dashboard-tab'));
+  const dashboardPanels = Array.from(document.querySelectorAll('.dashboard-tab-panel'));
+
+  dashboardTabs.forEach((button) => {
+    button.addEventListener('click', () => {
+      const targetId = button.dataset.target;
+      dashboardTabs.forEach((item) => item.classList.remove('active'));
+      dashboardPanels.forEach((panel) => panel.classList.remove('active'));
+      button.classList.add('active');
+      const panel = document.getElementById(targetId);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  const runSelect = document.getElementById('heatmap-run-select');
+  const analyteSelect = document.getElementById('heatmap-analyte-select');
+  const loadButton = document.getElementById('heatmap-load-btn');
+  const heatmapGrid = document.getElementById('heatmap-grid');
+  const heatmapStatus = document.getElementById('heatmap-status');
+
+  function renderEmptyHeatmapPlaceholder(message) {
+    if (!heatmapGrid) return;
+    heatmapGrid.innerHTML = '';
+    if (heatmapStatus) heatmapStatus.textContent = message || 'No heatmap data loaded.';
+  }
+
+  function renderHeatmap(payload) {
+    if (!heatmapGrid) return;
+    heatmapGrid.innerHTML = '';
+
+    const cells = payload.cells || [];
+    cells.forEach((cell) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = `heatmap-cell state-${cell.state || 'empty'}`;
+      el.innerHTML = `
+        <span class="cell-well">${cell.well}</span>
+        <span class="cell-value">${cell.value == null ? '' : cell.value}</span>
+        <span class="cell-accession">${cell.accession || ''}</span>
+      `;
+      el.title = [
+        cell.well,
+        cell.accession || 'No accession',
+        cell.value == null ? 'No value' : `Value: ${cell.value}`,
+        payload.cutoff == null ? '' : `Cutoff: ${payload.cutoff}`
+      ].filter(Boolean).join(' | ');
+      heatmapGrid.appendChild(el);
+    });
+
+    if (heatmapStatus) {
+      const cutoffText = payload.cutoff == null ? 'No cutoff' : `Cutoff ${payload.cutoff}`;
+      heatmapStatus.textContent = `${payload.message} ${cutoffText}.`;
+    }
+  }
+
+  async function loadAnalytesForRun(runId) {
+    if (!analyteSelect) return;
+    analyteSelect.innerHTML = '<option value="">Loading analytes...</option>';
+    analyteSelect.disabled = true;
+
+    if (!runId) {
+      analyteSelect.innerHTML = '<option value="">Choose an analyte</option>';
+      renderEmptyHeatmapPlaceholder('Choose a run to load analytes.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/heatmap/analytes/${encodeURIComponent(runId)}`);
+      const payload = await response.json();
+      const items = payload.items || [];
+
+      analyteSelect.innerHTML = '<option value="">Choose an analyte</option>';
+      items.forEach((name) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        analyteSelect.appendChild(option);
+      });
+      analyteSelect.disabled = items.length === 0;
+      renderEmptyHeatmapPlaceholder(items.length ? 'Choose an analyte, then click Load heatmap.' : 'No analytes found for that run.');
+    } catch (error) {
+      analyteSelect.innerHTML = '<option value="">Choose an analyte</option>';
+      analyteSelect.disabled = true;
+      renderEmptyHeatmapPlaceholder('Failed to load analytes.');
+    }
+  }
+
+  async function loadHeatmap() {
+    if (!runSelect || !analyteSelect) return;
+    const runId = runSelect.value;
+    const analyte = analyteSelect.value;
+
+    if (!runId || !analyte) {
+      renderEmptyHeatmapPlaceholder('Choose both a run and an analyte.');
+      return;
+    }
+
+    if (heatmapStatus) heatmapStatus.textContent = 'Loading heatmap...';
+
+    try {
+      const response = await fetch(`/api/heatmap/grid?run_id=${encodeURIComponent(runId)}&analyte=${encodeURIComponent(analyte)}`);
+      const payload = await response.json();
+      renderHeatmap(payload);
+    } catch (error) {
+      renderEmptyHeatmapPlaceholder('Failed to load heatmap grid.');
+    }
+  }
+
+  if (runSelect) {
+    runSelect.addEventListener('change', () => loadAnalytesForRun(runSelect.value));
+  }
+  if (loadButton) {
+    loadButton.addEventListener('click', loadHeatmap);
+  }
+</script>
+{% endblock %}
+
+
+<script id="heatmap-ui-frontend-enhancements">
+document.addEventListener("DOMContentLoaded", () => {
+  const runSelect = document.getElementById("heatmap-run-select");
+  const analyteSelect = document.getElementById("heatmap-analyte-select");
+  const loadButton = document.getElementById("heatmap-load-btn");
+  const heatmapGrid = document.getElementById("heatmap-grid");
+  const heatmapStatus = document.getElementById("heatmap-status");
+  if (!runSelect || !analyteSelect || !loadButton || !heatmapGrid || !heatmapStatus) return;
+
+  let selectedWell = null;
+  let chipRefreshToken = 0;
+
+  const esc = (value) => String(value == null ? "" : value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+  const fmt = (value) => {
+    if (value === null || value === undefined || value === "") return "";
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(2) : String(value);
+  };
+
+  const reviewLabel = (state) => ({
+    red: "Immediate review",
+    orange: "Review recommended",
+    green: "Within practical expectations",
+    low: "Detected / below review threshold",
+    empty: "Empty",
+    blue: "Pattern insight"
+  }[state] || state || "");
+
+  function ensureShell() {
+    const legend = document.querySelector(".heatmap-legend");
+    if (legend && !legend.dataset.uiEnhanced) {
+      legend.dataset.uiEnhanced = "1";
+      legend.innerHTML = `
+        <span class="review-chip state-empty">Empty</span>
+        <span class="review-chip state-low">Below 50% cutoff</span>
+        <span class="review-chip state-green">Within practical expectations</span>
+        <span class="review-chip state-orange">Review recommended</span>
+        <span class="review-chip state-red">Immediate review</span>
+        <span class="review-chip state-blue">Pattern insight / related</span>
+      `;
+    }
+
+    if (!document.getElementById("heatmap-analyte-chip-bar")) {
+      const chipBar = document.createElement("div");
+      chipBar.id = "heatmap-analyte-chip-bar";
+      chipBar.className = "heatmap-analyte-chip-bar";
+      chipBar.innerHTML = `<div class="heatmap-chip-status">Choose a run to load color-coded analyte chips.</div>`;
+      heatmapStatus.insertAdjacentElement("afterend", chipBar);
+    }
+
+    if (!document.getElementById("heatmap-detail-panel")) {
+      const panel = document.createElement("div");
+      panel.id = "heatmap-detail-panel";
+      panel.className = "heatmap-detail-panel";
+      panel.innerHTML = `
+        <div class="heatmap-detail-header">
+          <h4>Selected well</h4>
+          <button type="button" class="ghost-btn" id="heatmap-clear-focus-btn">Clear focus</button>
+        </div>
+        <div class="heatmap-detail-grid">
+          <div><span class="label">Well</span><span id="detail-well">—</span></div>
+          <div><span class="label">Accession</span><span id="detail-accession">—</span></div>
+          <div><span class="label">Analyte</span><span id="detail-analyte">—</span></div>
+          <div><span class="label">Value</span><span id="detail-value">—</span></div>
+          <div><span class="label">State</span><span id="detail-state">—</span></div>
+          <div><span class="label">Row</span><span id="detail-row">—</span></div>
+          <div><span class="label">Column</span><span id="detail-col">—</span></div>
+          <div><span class="label">Source file</span><span id="detail-source">—</span></div>
+        </div>
+        <div class="heatmap-note-shell">
+          <div class="label">Review tag</div>
+          <div class="heatmap-note-actions">
+            <button type="button" class="review-tag-btn state-red" data-review-tag="red">Immediate review</button>
+            <button type="button" class="review-tag-btn state-orange" data-review-tag="orange">Review recommended</button>
+            <button type="button" class="review-tag-btn state-blue" data-review-tag="blue">Pattern insight</button>
+            <button type="button" class="review-tag-btn state-green" data-review-tag="green">Within expectations</button>
+            <button type="button" class="review-tag-btn state-empty" data-review-tag="">Clear tag</button>
+          </div>
+          <div class="label">Reviewer note</div>
+          <textarea id="heatmap-review-note" rows="3" placeholder="Type a note for the selected well..."></textarea>
+        </div>
+      `;
+      heatmapGrid.insertAdjacentElement("afterend", panel);
+    }
+  }
+
+  function noteKey(well) {
+    return ["heatmapNote", runSelect.value || "", analyteSelect.value || "", well || ""].join(":");
+  }
+
+  function loadNote(well) {
+    try {
+      return JSON.parse(sessionStorage.getItem(noteKey(well)) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function saveNote(tag, noteText) {
+    if (!selectedWell) return;
+    sessionStorage.setItem(noteKey(selectedWell.well), JSON.stringify({
+      tag: tag || "",
+      note: noteText || ""
+    }));
+  }
+
+  function paintStoredTags() {
+    [...heatmapGrid.querySelectorAll(".heatmap-cell")].forEach((cell) => {
+      cell.classList.remove("review-tag-red", "review-tag-orange", "review-tag-blue", "review-tag-green");
+      const note = loadNote(cell.dataset.well || "");
+      if (note.tag) cell.classList.add(`review-tag-${note.tag}`);
+    });
+  }
+
+  function updateDetailPanel(data) {
+    const note = loadNote(data?.well || "");
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value || "—";
+    };
+
+    setText("detail-well", data?.well || "—");
+    setText("detail-accession", data?.accession || "—");
+    setText("detail-analyte", analyteSelect.value || "—");
+    setText("detail-value", data?.value == null ? "—" : fmt(data.value));
+    setText("detail-state", reviewLabel(data?.state));
+    setText("detail-row", data?.row || "—");
+    setText("detail-col", data?.col || "—");
+    setText("detail-source", data?.source_file || "—");
+
+    const box = document.getElementById("heatmap-review-note");
+    if (box) box.value = note.note || "";
+
+    document.querySelectorAll(".review-tag-btn").forEach((btn) => {
+      btn.classList.toggle("is-active", (btn.dataset.reviewTag || "") === (note.tag || ""));
+    });
+  }
+
+  function clearFocus() {
+    selectedWell = null;
+    [...heatmapGrid.querySelectorAll(".heatmap-cell")].forEach((cell) => {
+      cell.classList.remove("is-selected", "is-related", "is-dimmed");
+    });
+    updateDetailPanel(null);
+  }
+
+  function isRelated(a, b) {
+    if (!a || !b || a.well === b.well) return false;
+    return (
+      (a.row && b.row && a.row === b.row) ||
+      (a.col && b.col && a.col === b.col) ||
+      (a.state && b.state && a.state === b.state && a.state !== "empty") ||
+      (a.source_file && b.source_file && a.source_file === b.source_file)
+    );
+  }
+
+  function applyFocus(meta) {
+    selectedWell = meta;
+    [...heatmapGrid.querySelectorAll(".heatmap-cell")].forEach((cell) => {
+      const current = {
+        well: cell.dataset.well || "",
+        row: cell.dataset.row || "",
+        col: cell.dataset.col || "",
+        state: cell.dataset.state || "",
+        source_file: cell.dataset.sourceFile || ""
+      };
+      cell.classList.remove("is-selected", "is-related", "is-dimmed");
+      if (current.well === meta.well) {
+        cell.classList.add("is-selected");
+      } else if (isRelated(meta, current)) {
+        cell.classList.add("is-related");
+      } else {
+        cell.classList.add("is-dimmed");
+      }
+    });
+    updateDetailPanel(meta);
+  }
+
+  function bindDetailActions() {
+    const clearBtn = document.getElementById("heatmap-clear-focus-btn");
+    if (clearBtn && !clearBtn.dataset.bound) {
+      clearBtn.dataset.bound = "1";
+      clearBtn.addEventListener("click", clearFocus);
+    }
+
+    const noteBox = document.getElementById("heatmap-review-note");
+    if (noteBox && !noteBox.dataset.bound) {
+      noteBox.dataset.bound = "1";
+      noteBox.addEventListener("input", () => {
+        const activeTag = document.querySelector(".review-tag-btn.is-active")?.dataset.reviewTag || "";
+        saveNote(activeTag, noteBox.value);
+        paintStoredTags();
+      });
+    }
+
+    document.querySelectorAll(".review-tag-btn").forEach((btn) => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        if (!selectedWell) return;
+        document.querySelectorAll(".review-tag-btn").forEach((node) => node.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        const noteText = document.getElementById("heatmap-review-note")?.value || "";
+        saveNote(btn.dataset.reviewTag || "", noteText);
+        paintStoredTags();
+      });
+    });
+  }
+
+  function classifyFromCells(cells) {
+    const states = (cells || []).map((c) => c.state || "empty");
+    if (states.includes("red")) return "red";
+    if (states.includes("orange")) return "orange";
+    if (states.includes("green")) return "green";
+    if (states.includes("low")) return "low";
+    return "empty";
+  }
+
+  function enhanceRenderedGrid() {
+    [...heatmapGrid.querySelectorAll(".heatmap-cell")].forEach((cell) => {
+      const well = (cell.querySelector(".cell-well")?.textContent || "").trim();
+      const valueNode = cell.querySelector(".cell-value");
+      const accessionNode = cell.querySelector(".cell-accession");
+      const rawValue = valueNode ? valueNode.textContent.trim() : "";
+      const n = Number(rawValue);
+
+      if (valueNode && rawValue && Number.isFinite(n)) {
+        valueNode.textContent = n.toFixed(2);
+      }
+
+      const classes = [...cell.classList];
+      const stateClass = classes.find((name) => name.startsWith("state-")) || "state-empty";
+      const state = stateClass.replace("state-", "");
+
+      cell.dataset.well = well;
+      cell.dataset.row = well ? well.slice(0, 1) : "";
+      cell.dataset.col = well ? well.slice(1) : "";
+      cell.dataset.state = state;
+      cell.dataset.accession = accessionNode ? accessionNode.textContent.trim() : "";
+      cell.dataset.sourceFile = cell.dataset.sourceFile || "";
+      cell.dataset.value = Number.isFinite(n) ? String(n) : "";
+
+      if (!cell.dataset.bound) {
+        cell.dataset.bound = "1";
+        cell.addEventListener("click", () => {
+          const meta = {
+            well: cell.dataset.well || "",
+            row: cell.dataset.row || "",
+            col: cell.dataset.col || "",
+            state: cell.dataset.state || "",
+            accession: cell.dataset.accession || "",
+            source_file: cell.dataset.sourceFile || "",
+            value: cell.dataset.value ? Number(cell.dataset.value) : null
+          };
+          if (selectedWell && selectedWell.well === meta.well) {
+            clearFocus();
+          } else {
+            applyFocus(meta);
+          }
+        });
+      }
+    });
+
+    bindDetailActions();
+    paintStoredTags();
+  }
+
+  async function refreshAnalyteChips() {
+    const token = ++chipRefreshToken;
+    const chipBar = document.getElementById("heatmap-analyte-chip-bar");
+    if (!chipBar) return;
+
+    const runId = runSelect.value;
+    if (!runId) {
+      chipBar.innerHTML = `<div class="heatmap-chip-status">Choose a run to see analyte review chips.</div>`;
+      return;
+    }
+
+    chipBar.innerHTML = `<div class="heatmap-chip-status">Loading analyte review chips...</div>`;
+
+    const analyteResp = await fetch(`/api/heatmap/analytes/${encodeURIComponent(runId)}`);
+    const analyteData = await analyteResp.json();
+    const analytes = analyteData.items || [];
+
+    const results = await Promise.all(
+      analytes.map(async (name) => {
+        const resp = await fetch(`/api/heatmap/grid?run_id=${encodeURIComponent(runId)}&analyte=${encodeURIComponent(name)}`);
+        const payload = await resp.json();
+        return {
+          analyte: name,
+          mapped_count: payload.mapped_count || 0,
+          state: classifyFromCells(payload.cells || []),
+          message: payload.message || ""
+        };
+      })
+    );
+
+    if (token !== chipRefreshToken) return;
+
+    results.sort((a, b) => {
+      const rank = { red: 0, orange: 1, green: 2, low: 3, empty: 4 };
+      return (rank[a.state] ?? 99) - (rank[b.state] ?? 99) || b.mapped_count - a.mapped_count || a.analyte.localeCompare(b.analyte);
+    });
+
+    chipBar.innerHTML = results.map((item) => `
+      <button type="button" class="analyte-summary-chip state-${item.state}" data-analyte="${esc(item.analyte)}" title="${esc(item.message)}">
+        <span class="chip-name">${esc(item.analyte)}</span>
+        <span class="chip-meta">${item.mapped_count} mapped</span>
+      </button>
+    `).join("");
+
+    chipBar.querySelectorAll(".analyte-summary-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const analyte = btn.dataset.analyte || "";
+        analyteSelect.disabled = false;
+        if (![...analyteSelect.options].some((o) => o.value === analyte)) {
+          analyteSelect.appendChild(new Option(analyte, analyte));
+        }
+        analyteSelect.value = analyte;
+        loadButton.click();
+      });
+    });
+  }
+
+  ensureShell();
+  enhanceRenderedGrid();
+
+  const observer = new MutationObserver(() => {
+    enhanceRenderedGrid();
+  });
+  observer.observe(heatmapGrid, { childList: true, subtree: true });
+
+  runSelect.addEventListener("change", () => {
+    clearFocus();
+    refreshAnalyteChips().catch(console.error);
+  });
+
+  loadButton.addEventListener("click", () => {
+    setTimeout(() => {
+      clearFocus();
+      enhanceRenderedGrid();
+    }, 120);
+  });
+
+  refreshAnalyteChips().catch(console.error);
+});
+</script>
+

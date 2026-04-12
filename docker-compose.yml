@@ -1,0 +1,15 @@
+services:
+  lcms-reviewer:
+    build:
+      context: ..
+      dockerfile: reviewer_app/Dockerfile
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      LCMS_DATA_DIR: /data
+      LCMS_SECRET_KEY: change-me
+      # Optional: set DATABASE_URL to PostgreSQL for heavier multi-user use
+      # DATABASE_URL: postgresql+psycopg://user:pass@db:5432/lcms
+    volumes:
+      - ./persistent_data:/data
