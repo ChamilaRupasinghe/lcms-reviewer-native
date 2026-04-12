@@ -1,0 +1,39 @@
+Production deployment prep for server 10.117.1.148:4444
+
+Recommended production topology
+- nginx reverse proxy on port 4444
+- gunicorn application server behind nginx
+- PostgreSQL database for concurrent multi-user operation
+- persistent Docker volumes for database and generated review outputs
+- docker compose with restart=unless-stopped plus optional systemd wrapper
+
+Files in this folder
+- .env.example: environment template
+- docker-compose.prod.yml: PostgreSQL + app + nginx stack
+- nginx.conf: reverse proxy configuration listening on 4444
+- systemd/lcms-reviewer.service: auto-start the docker compose stack on reboot
+- scripts/deploy_prod.sh: copy and launch helper
+- scripts/backup_prod.sh: Postgres dump + app data archive
+
+Suggested install path on the server
+/opt/lcms-reviewer
+
+Deployment steps on the server
+1. Copy the full project to /opt/lcms-reviewer
+2. cd /opt/lcms-reviewer/reviewer_app/prod
+3. cp .env.example .env
+4. Edit .env and set strong secrets/passwords
+5. docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+6. Open http://10.117.1.148:4444/
+
+Optional boot-time auto-start
+1. Copy systemd/lcms-reviewer.service to /etc/systemd/system/
+2. sudo systemctl daemon-reload
+3. sudo systemctl enable lcms-reviewer.service
+4. sudo systemctl start lcms-reviewer.service
+
+Operational notes
+- SQLite is fine for low-volume local use, but PostgreSQL is preferred for multiple simultaneous users.
+- Generated HTML and CSV outputs are stored in the persistent app_data volume.
+- Health endpoint is /health.
+- If you later add TLS, place a corporate reverse proxy or TLS terminator in front of nginx or replace nginx with your standard ingress.

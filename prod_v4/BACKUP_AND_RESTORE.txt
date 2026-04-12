@@ -1,0 +1,25 @@
+Backup strategy
+
+What must be backed up
+1. PostgreSQL database contents
+2. app_data volume storing uploaded files and generated outputs
+3. .env file and deployment configs
+
+Included scripts
+- scripts/backup_prod.sh: creates compressed PostgreSQL dump and app_data archive
+- scripts/restore_prod.sh: restores both database and app_data archive
+- systemd/lcms-reviewer-backup.timer: nightly backup scheduler at 02:15
+
+Recommended retention
+- keep at least 14 daily backups locally
+- copy backups off-server to lab NAS or secure backup target
+- test one full restore before go-live
+- test another restore after every major app update
+
+Manual backup
+cd /opt/lcms-reviewer/reviewer_app/prod_v4
+./scripts/backup_prod.sh
+
+Manual restore
+cd /opt/lcms-reviewer/reviewer_app/prod_v4
+./scripts/restore_prod.sh /path/to/db.sql.gz /path/to/app_data.tar.gz

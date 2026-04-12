@@ -1,0 +1,9 @@
+[Unit]
+Description=LCMS Reviewer backup job
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/lcms-reviewer/reviewer_app/prod_v4
+ExecStart=/opt/lcms-reviewer/reviewer_app/prod_v4/scripts/backup_prod.sh

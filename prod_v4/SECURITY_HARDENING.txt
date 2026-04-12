@@ -1,0 +1,25 @@
+Security hardening notes for v4
+
+Implemented in package
+- nginx reverse proxy only exposes port 4444
+- app and database are not published to host ports
+- app and nginx containers use read-only root filesystems
+- tmpfs used for temporary writable paths
+- no-new-privileges set on app and nginx
+- nginx drops all Linux capabilities except NET_BIND_SERVICE
+- basic rate limiting enabled in nginx
+- security headers enabled: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, Content-Security-Policy
+- server_tokens off in nginx
+- Docker log rotation configured
+- systemd boot-time service included
+- backup timer included
+
+Operational hardening recommended before go-live
+- restrict inbound firewall to trusted office/VPN ranges for port 4444
+- if HTTPS/TLS is added upstream, set LCMS_SECURE_COOKIES=true in .env
+- rotate LCMS_SECRET_KEY and PostgreSQL password if they were ever exposed
+- store .env with root-readable permissions only, e.g. chmod 600
+- keep Docker Engine, nginx image, postgres image, and base OS patched
+- back up both PostgreSQL and app_data volume on a schedule
+- test restore before go-live and after major upgrades
+- if broader access is required, place corporate authentication or SSO in front of nginx

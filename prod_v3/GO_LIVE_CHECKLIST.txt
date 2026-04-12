@@ -1,0 +1,44 @@
+Go-live checklist for 10.117.1.148:4444
+
+Before installation
+[ ] Confirm Docker Engine and docker compose are installed
+[ ] Confirm /opt has at least 5 GB free
+[ ] Confirm port 4444 is free
+[ ] Confirm firewall rules are ready for approved user networks
+[ ] Confirm backup destination path exists or will be created
+
+Configuration
+[ ] Copy project to /opt/lcms-reviewer
+[ ] Copy .env.example to .env
+[ ] Replace LCMS_SECRET_KEY with a strong random value
+[ ] Replace POSTGRES_PASSWORD with a strong random value
+[ ] Verify DATABASE_URL matches the database credentials
+[ ] Decide whether LCMS_SECURE_COOKIES should be true or false
+[ ] chmod 600 .env
+
+Initial deployment
+[ ] Run ./scripts/preflight_check.sh
+[ ] Run docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+[ ] Run docker compose --env-file .env -f docker-compose.prod.yml ps
+[ ] Confirm db, app, and nginx are healthy
+[ ] Open http://10.117.1.148:4444/health
+[ ] Open http://10.117.1.148:4444/
+[ ] Upload a sample LCMS Excel file and verify a run is saved
+[ ] Download a generated HTML or CSV output and verify persistence
+
+Operational readiness
+[ ] Install systemd/lcms-reviewer.service
+[ ] Enable and start lcms-reviewer.service
+[ ] Install systemd/lcms-reviewer-backup.service
+[ ] Install systemd/lcms-reviewer-backup.timer
+[ ] Enable and start lcms-reviewer-backup.timer
+[ ] Run one manual backup
+[ ] Run one test restore in a non-production environment or maintenance window
+[ ] Record admin owner, backup owner, and rollback owner
+
+Go-live approval
+[ ] Confirm lab reviewers can access the app
+[ ] Confirm concurrent users can upload and review data
+[ ] Confirm restart survives reboot
+[ ] Confirm last backup timestamp is documented
+[ ] Approve production use

@@ -1,0 +1,19 @@
+[Unit]
+Description=LCMS Reviewer v4 Docker Compose Stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/lcms-reviewer/reviewer_app/prod_v4
+Environment=COMPOSE_PROJECT_NAME=lcms-reviewer
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/docker compose --env-file .env -f docker-compose.prod.yml config -q
+ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+ExecStop=/usr/bin/docker compose --env-file .env -f docker-compose.prod.yml down
+ExecReload=/usr/bin/docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

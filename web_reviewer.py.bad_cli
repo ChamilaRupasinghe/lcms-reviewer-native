@@ -1,0 +1,1444 @@
+﻿#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import uuid
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, List
+
+import pandas as pd
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, create_engine, func, select
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship, scoped_session, sessionmaker
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.utils import secure_filename
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import lcms_parent_metabolite_analyzer as analyzer
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.environ.get("LCMS_DATA_DIR", BASE_DIR / "reviewer_data"))
+UPLOAD_ROOT = DATA_DIR / "uploads"
+OUTPUT_ROOT = DATA_DIR / "outputs"
+DB_PATH = DATA_DIR / "lcms_reviewer.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DB_PATH}")
+HOST = os.environ.get("LCMS_HOST", "0.0.0.0")
+PORT = int(os.environ.get("LCMS_PORT", "8000"))
+ALLOWED_EXTENSIONS = {".xlsx"}
+
+SEVERITY_ORDER = {"red": 3, "amber": 2, "info": 1, "": 0, None: 0}
+SEVERITY_LABELS = {
+    "red": "Immediate review",
+    "amber": "Review recommended",
+    "info": "Pattern insight",
+}
+
+REVIEW_SCENARIOS = [
+    {
+        "label": "Methadone â†’ EDDP",
+        "parent": "Methadone",
+        "metabolite": "EDDP",
+        "kind": "ratio_min",
+        "warn_ratio": 0.60,
+        "red_ratio": 0.09,
+        "parent_review_floor": 500.0,
+        "explanation": "Parent-heavy methadone with absent or very low EDDP can suggest timing issues, atypical metabolism, or specimen manipulation.",
+    },
+    {
+        "label": "Buprenorphine â†’ Norbuprenorphine",
+        "parent": "Buprenorphine",
+        "metabolite": "Norbuprenorphine",
+        "kind": "ratio_min",
+        "warn_ratio": 0.10,
+        "red_ratio": 0.02,
+        "parent_review_floor": 100.0,
+        "explanation": "Very low norbuprenorphine relative to buprenorphine is a classic parent-heavy pattern that deserves close review.",
+    },
+    {
+        "label": "Fentanyl â†’ Norfentanyl",
+        "parent": "Fentanyl-x",
+        "metabolite": "Norfentanyl-x",
+        "kind": "metabolite_required",
+        "warn_ratio": 0.25,
+        "parent_review_floor": 5.0,
+        "explanation": "Urine is usually metabolite-favored for fentanyl; parent-only or very low-norfentanyl patterns should be reviewed.",
+    },
+    {
+        "label": "Morphine â†’ Hydromorphone",
+        "parent": "Morphine",
+        "metabolite": "Hydromorphone",
+        "kind": "minor_metabolite_max",
+        "warn_ratio": 0.007,
+        "red_ratio": 0.10,
+        "display_percent": True,
+        "explanation": "Hydromorphone is usually a minor metabolite of morphine. Ratios above the minor-metabolite range may indicate additional hydromorphone exposure.",
+    },
+    {
+        "label": "Oxycodone â†’ Hydrocodone impurity check",
+        "parent": "Oxycodone",
+        "metabolite": "Hydrocodone",
+        "kind": "impurity_max",
+        "warn_ratio": 0.02,
+        "display_percent": True,
+        "explanation": "Trace hydrocodone may appear as an oxycodone impurity, but larger fractions deserve review.",
+    },
+    {
+        "label": "Oxycodone â†’ Noroxycodone",
+        "parent": "Oxycodone",
+        "metabolite": "Noroxycodone",
+        "kind": "metabolite_required",
+        "parent_review_floor": 200.0,
+        "explanation": "Noroxycodone is a major oxycodone metabolite and helps support expected metabolism.",
+    },
+    {
+        "label": "Carisoprodol â†’ Meprobamate",
+        "parent": "Carisoprodol",
+        "metabolite": "Meprobamate",
+        "kind": "metabolite_required",
+        "parent_review_floor": 200.0,
+        "explanation": "Carisoprodol is extensively metabolized to meprobamate, so parent-only patterns merit reviewer attention.",
+    },
+    {
+        "label": "Naltrexone â†’ 6Î²-Naltrexol",
+        "parent": "Naltrexone",
+        "metabolite": "6beta-Naltrexol",
+        "kind": "metabolite_required",
+        "parent_review_floor": 200.0,
+        "explanation": "6Î²-naltrexol is the major metabolite and is often higher than parent in urine.",
+    },
+    {
+        "label": "Zolpidem â†’ Zolpidem acid",
+        "parent": "Zolpidem",
+        "metabolite": "Zolpidem phenyl-4-carboxylic",
+        "kind": "metabolite_required",
+        "parent_review_floor": 50.0,
+        "explanation": "Urine is commonly metabolite-dominant for zolpidem, so absent acid metabolite can be clinically useful to review.",
+    },
+    {
+        "label": "Dextromethorphan â†’ Dextrorphan",
+        "parent": "Dextromethorphan",
+        "metabolite": "Dextrorphan",
+        "kind": "metabolite_required",
+        "parent_review_floor": 200.0,
+        "explanation": "Absent dextrorphan may reflect very early collection, poor CYP2D6 metabolism, or a suspect parent-heavy profile.",
+    },
+]
+
+Base = declarative_base()
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class ReviewRun(Base):
+    __tablename__ = "review_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    label: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
+    file_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    accession_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    flagged_accession_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    red_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    amber_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    upload_folder: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    output_folder: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    report_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    flags_csv_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    summary_csv_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    local_refs_csv_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    bundle_zip_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    uploaded_files: Mapped[List["UploadedFile"]] = relationship(back_populates="run", cascade="all, delete-orphan")
+    specimens: Mapped[List["Specimen"]] = relationship(back_populates="run", cascade="all, delete-orphan")
+    local_refs: Mapped[List["LocalRatioReference"]] = relationship(back_populates="run", cascade="all, delete-orphan")
+    metabolite_patterns: Mapped[List["MetaboliteOnlyPattern"]] = relationship(back_populates="run", cascade="all, delete-orphan")
+
+
+class UploadedFile(Base):
+    __tablename__ = "uploaded_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("review_runs.id"), nullable=False, index=True)
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    run: Mapped[ReviewRun] = relationship(back_populates="uploaded_files")
+
+
+class Specimen(Base):
+    __tablename__ = "specimens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("review_runs.id"), nullable=False, index=True)
+    accession: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    instrument: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    source_file: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    well_position: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    batch_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    run_date_text: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    flag_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    highest_severity: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+    positive_analytes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    run: Mapped[ReviewRun] = relationship(back_populates="specimens")
+    analytes: Mapped[List["AnalyteResult"]] = relationship(back_populates="specimen", cascade="all, delete-orphan")
+    flags: Mapped[List["Flag"]] = relationship(back_populates="specimen", cascade="all, delete-orphan")
+
+
+class AnalyteResult(Base):
+    __tablename__ = "analyte_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    specimen_id: Mapped[int] = mapped_column(ForeignKey("specimens.id"), nullable=False, index=True)
+    analyte: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    is_positive: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    specimen: Mapped[Specimen] = relationship(back_populates="analytes")
+
+
+class Flag(Base):
+    __tablename__ = "flags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    specimen_id: Mapped[int] = mapped_column(ForeignKey("specimens.id"), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    rule_code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    flag_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    analyte_a: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    value_a: Mapped[float | None] = mapped_column(Float)
+    analyte_b: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    value_b: Mapped[float | None] = mapped_column(Float)
+    ratio_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    ratio_value: Mapped[float | None] = mapped_column(Float)
+    comment: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    specimen: Mapped[Specimen] = relationship(back_populates="flags")
+
+
+class LocalRatioReference(Base):
+    __tablename__ = "local_ratio_refs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("review_runs.id"), nullable=False, index=True)
+    pair_label: Mapped[str] = mapped_column(String(120), nullable=False)
+    n_value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    p05: Mapped[float | None] = mapped_column(Float)
+    median: Mapped[float | None] = mapped_column(Float)
+    p95: Mapped[float | None] = mapped_column(Float)
+
+    run: Mapped[ReviewRun] = relationship(back_populates="local_refs")
+
+
+class MetaboliteOnlyPattern(Base):
+    __tablename__ = "metabolite_only_patterns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("review_runs.id"), nullable=False, index=True)
+    pattern: Mapped[str] = mapped_column(String(255), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    interpretation: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    run: Mapped[ReviewRun] = relationship(back_populates="metabolite_patterns")
+
+
+
+class RuntimeAnalyteThreshold(Base):
+    __tablename__ = "analyte_thresholds"
+
+    analyte: Mapped[str] = mapped_column(String(120), primary_key=True)
+    cutoff_value: Mapped[float] = mapped_column(Float, nullable=False)
+    upper_limit_value: Mapped[float | None] = mapped_column(Float)
+    enabled: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source: Mapped[str] = mapped_column(String(80), default="default", nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(120))
+    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class RuntimeRuleCatalog(Base):
+    __tablename__ = "rule_catalog"
+
+    rule_code: Mapped[str] = mapped_column(String(120), primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="amber", nullable=False)
+    enabled: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    analyte_scope: Mapped[str | None] = mapped_column(Text)
+    logic_summary: Mapped[str | None] = mapped_column(Text)
+    reviewer_guidance: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(80), default="default", nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(120))
+    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+def create_engine_and_session() -> tuple:
+    connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    engine = create_engine(DATABASE_URL, future=True, connect_args=connect_args)
+    if DATABASE_URL.startswith("sqlite"):
+        with engine.begin() as conn:
+            conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+            conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+    session_factory = scoped_session(sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False))
+    return engine, session_factory
+
+
+for folder in (DATA_DIR, UPLOAD_ROOT, OUTPUT_ROOT):
+    folder.mkdir(parents=True, exist_ok=True)
+
+ENGINE, SessionLocal = create_engine_and_session()
+Base.metadata.create_all(ENGINE)
+
+app = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+app.secret_key = os.environ.get("LCMS_SECRET_KEY", "lcms-reviewer-secret")
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("LCMS_MAX_CONTENT_MB", "64")) * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("LCMS_SECURE_COOKIES", "false").lower() == "true"
+
+
+@app.teardown_appcontext
+def cleanup_session(exception=None):
+    SessionLocal.remove()
+
+
+def allowed_file(filename: str) -> bool:
+    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
+
+def safe_num(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def normalize_instrument(value: str | None) -> str:
+    text = str(value or "").strip()
+    return text if text else "Unknown"
+
+
+def severity_rank(value: str | None) -> int:
+    return SEVERITY_ORDER.get(str(value or "").lower(), 0)
+
+
+def worst_severity(values: Iterable[str | None]) -> str:
+    best = ""
+    best_rank = 0
+    for item in values:
+        rank = severity_rank(item)
+        if rank > best_rank:
+            best = str(item or "")
+            best_rank = rank
+    return best
+
+
+def run_status(run: ReviewRun) -> str:
+    if run.red_count:
+        return "red"
+    if run.amber_count:
+        return "amber"
+    return "ok"
+
+
+
+def friendly_logic(rule_code: str, rule_lookup: dict | None = None) -> str:
+    item = (rule_lookup or DEFAULT_RULE_LOOKUP).get(rule_code, {})
+    return item.get("logic", "Stored review rule")
+
+
+def analyte_level_meta(value: float | None, analyte: str, cutoff_map: dict[str, float] | None = None) -> dict:
+    cutoff = (cutoff_map or DEFAULT_CUTOFFS).get(analyte)
+    multiplier = None
+    tone = "muted"
+    label = "Reference only"
+    short_label = "info"
+    if value is None:
+        return {
+            "cutoff": cutoff,
+            "multiplier": None,
+            "tone": tone,
+            "label": label,
+            "short_label": short_label,
+            "display_multiplier": "",
+        }
+    if cutoff and cutoff > 0:
+        multiplier = value / cutoff
+        if multiplier < 1:
+            tone = "trace"
+            label = "Detected below cutoff"
+            short_label = "trace"
+        elif multiplier < 5:
+            tone = "positive"
+            label = "Positive"
+            short_label = "positive"
+        elif multiplier < 20:
+            tone = "high"
+            label = "High positive"
+            short_label = "high"
+        else:
+            tone = "extreme"
+            label = "Very high signal"
+            short_label = "extreme"
+    return {
+        "cutoff": cutoff,
+        "multiplier": multiplier,
+        "tone": tone,
+        "label": label,
+        "short_label": short_label,
+        "display_multiplier": f"{multiplier:.1f}Ã— cutoff" if multiplier is not None else "",
+    }
+
+def format_percentage(ratio: float | None) -> str:
+    if ratio is None:
+        return ""
+    return f"{ratio * 100:.2f}%"
+
+
+
+def build_flag_rule_summary(flags: List[Flag], rule_lookup: dict | None = None, limit: int = 6) -> List[dict]:
+    grouped: dict[str, dict] = {}
+    counts = Counter(flag.flag_title for flag in flags)
+    for flag in flags:
+        if flag.flag_title not in grouped:
+            grouped[flag.flag_title] = {
+                "title": flag.flag_title,
+                "severity": flag.severity,
+                "count": counts[flag.flag_title],
+                "rule_code": flag.rule_code,
+                "logic": friendly_logic(flag.rule_code, rule_lookup),
+            }
+    ordered = sorted(grouped.values(), key=lambda item: (-item["count"], -severity_rank(item["severity"]), item["title"]))
+    return ordered[:limit]
+
+def build_instrument_summary(specimens: List[Specimen], flags: List[Flag]) -> List[dict]:
+    instrument_buckets: dict[str, dict] = defaultdict(lambda: {"specimens": 0, "flagged": 0, "red": 0, "amber": 0})
+    specimen_map = {specimen.id: specimen for specimen in specimens}
+    for specimen in specimens:
+        key = normalize_instrument(specimen.instrument)
+        instrument_buckets[key]["specimens"] += 1
+        if specimen.flag_count:
+            instrument_buckets[key]["flagged"] += 1
+    for flag in flags:
+        specimen = specimen_map.get(flag.specimen_id)
+        if not specimen:
+            continue
+        key = normalize_instrument(specimen.instrument)
+        if flag.severity == "red":
+            instrument_buckets[key]["red"] += 1
+        elif flag.severity == "amber":
+            instrument_buckets[key]["amber"] += 1
+    rows = []
+    for instrument, stats in instrument_buckets.items():
+        rate = (stats["flagged"] / stats["specimens"] * 100.0) if stats["specimens"] else 0.0
+        rows.append({"instrument": instrument, "flag_rate": rate, **stats})
+    return sorted(rows, key=lambda item: (-item["flagged"], item["instrument"]))
+
+
+def build_dashboard_instrument_summary(specimens: List[Specimen]) -> List[dict]:
+    buckets: dict[str, dict] = defaultdict(lambda: {"specimens": 0, "flagged": 0, "red": 0, "amber": 0})
+    for specimen in specimens:
+        key = normalize_instrument(specimen.instrument)
+        buckets[key]["specimens"] += 1
+        if specimen.flag_count:
+            buckets[key]["flagged"] += 1
+        if specimen.highest_severity == "red":
+            buckets[key]["red"] += 1
+        elif specimen.highest_severity == "amber":
+            buckets[key]["amber"] += 1
+    rows = []
+    for instrument, stats in buckets.items():
+        rows.append({
+            "instrument": instrument,
+            "specimens": stats["specimens"],
+            "flagged": stats["flagged"],
+            "red": stats["red"],
+            "amber": stats["amber"],
+            "flag_rate": (stats["flagged"] / stats["specimens"] * 100.0) if stats["specimens"] else 0.0,
+        })
+    return sorted(rows, key=lambda item: (-item["specimens"], item["instrument"]))
+
+
+
+def build_specimen_analyte_rows(analytes: List[AnalyteResult], cutoff_map: dict[str, float] | None = None) -> tuple[list[dict], dict, dict]:
+    rows = []
+    value_map = {}
+    counts = {"positive": 0, "extreme": 0, "high": 0, "trace": 0}
+    for item in analytes:
+        meta = analyte_level_meta(item.value, item.analyte, cutoff_map=cutoff_map)
+        row = {
+            "id": item.id,
+            "analyte": item.analyte,
+            "value": item.value,
+            "is_positive": bool(item.is_positive),
+            **meta,
+        }
+        rows.append(row)
+        value_map[item.analyte] = float(item.value)
+        if row["is_positive"]:
+            counts["positive"] += 1
+        if meta["tone"] == "extreme":
+            counts["extreme"] += 1
+        elif meta["tone"] == "high":
+            counts["high"] += 1
+        elif meta["tone"] == "trace":
+            counts["trace"] += 1
+    rows.sort(key=lambda row: (0 if row["is_positive"] else 1, -safe_num(row["value"]) if row["value"] is not None else 0, row["analyte"]))
+    return rows, value_map, counts
+
+
+def build_suspect_peak_cards(
+    analyte_rows: List[dict],
+    value_map: dict,
+    flags: List[Flag],
+    rule_lookup: dict | None = None,
+    cutoff_map: dict[str, float] | None = None,
+) -> List[dict]:
+    cards = []
+    seen = set()
+    cutoff_map = cutoff_map or DEFAULT_CUTOFFS
+
+    for flag in flags:
+        details = []
+        if flag.analyte_a:
+            details.append(f"{flag.analyte_a} {analyzer.fmt_num(flag.value_a) if flag.value_a is not None else ''}".strip())
+        if flag.analyte_b:
+            details.append(f"{flag.analyte_b} {analyzer.fmt_num(flag.value_b) if flag.value_b is not None else ''}".strip())
+        ratio_text = ""
+        if flag.ratio_name and flag.ratio_value is not None:
+            ratio_text = f"{flag.ratio_name}: {analyzer.fmt_ratio(flag.ratio_value)}"
+        key = (flag.rule_code, flag.analyte_a, flag.analyte_b)
+        if key in seen:
+            continue
+        seen.add(key)
+        cards.append(
+            {
+                "severity": flag.severity,
+                "title": flag.flag_title,
+                "summary": flag.comment,
+                "detail": " Â· ".join(part for part in [", ".join(details), ratio_text] if part),
+                "logic": friendly_logic(flag.rule_code, rule_lookup),
+                "source": "Rule-based flag",
+            }
+        )
+
+    flag_related_analytes = {flag.analyte_a for flag in flags if flag.analyte_a} | {flag.analyte_b for flag in flags if flag.analyte_b}
+    for row in analyte_rows:
+        if row["tone"] != "extreme" or row["analyte"] in flag_related_analytes:
+            continue
+        cards.append(
+            {
+                "severity": "info",
+                "title": f"Review very high {row['analyte']} signal",
+                "summary": "Level is far above the decision cutoff. If unexpected clinically, review chromatographic integration, calibration context, and specimen history.",
+                "detail": f"{analyzer.fmt_num(row['value'])} ng/mL Â· {row['display_multiplier']}",
+                "logic": "QC review suggestion",
+                "source": "Analyte intensity screen",
+            }
+        )
+
+    for scenario in REVIEW_SCENARIOS:
+        parent = scenario["parent"]
+        metabolite = scenario["metabolite"]
+        p_value = value_map.get(parent)
+        m_value = value_map.get(metabolite)
+        if p_value is None or not positive_with_cutoffs(p_value, parent, cutoff_map):
+            continue
+        p_cutoff = cutoff_map.get(parent, 0) or 0
+        m_cutoff = cutoff_map.get(metabolite, 0) or 0
+        ratio = (m_value / p_value) if (m_value is not None and p_value) else None
+        key = (scenario["label"], round(ratio or -1, 6), round(p_value, 4), round(m_value or -1, 4))
+        if key in seen:
+            continue
+
+        severity = None
+        summary = None
+        detail = None
+        if scenario["kind"] == "ratio_min":
+            if (m_value is None or m_value < m_cutoff) and p_value >= scenario.get("parent_review_floor", p_cutoff):
+                severity = "red" if scenario.get("red_ratio") is not None else "amber"
+                summary = f"{metabolite} is absent or below cutoff despite positive {parent}."
+            elif ratio is not None and scenario.get("red_ratio") is not None and ratio < scenario["red_ratio"]:
+                severity = "red"
+                summary = f"{metabolite}:{parent} ratio is below the strong-suspicion threshold."
+            elif ratio is not None and ratio < scenario.get("warn_ratio", 0):
+                severity = "amber"
+                summary = f"{metabolite}:{parent} ratio is below the expected reviewer threshold."
+            if ratio is not None:
+                detail = f"Ratio {analyzer.fmt_ratio(ratio)}"
+        elif scenario["kind"] == "metabolite_required":
+            if (m_value is None or m_value < m_cutoff) and p_value >= scenario.get("parent_review_floor", p_cutoff):
+                severity = "amber"
+                summary = f"Expected metabolite {metabolite} is absent or below cutoff."
+                detail = f"{parent} {analyzer.fmt_num(p_value)} ng/mL"
+            elif ratio is not None and scenario.get("warn_ratio") and ratio < scenario["warn_ratio"]:
+                severity = "amber"
+                summary = f"{metabolite}:{parent} ratio is lower than the practical review band."
+                detail = f"Ratio {analyzer.fmt_ratio(ratio)}"
+        elif scenario["kind"] == "minor_metabolite_max" and ratio is not None:
+            if ratio > scenario.get("red_ratio", 999):
+                severity = "red"
+                summary = f"{metabolite} is disproportionately high for expected minor metabolite formation."
+            elif ratio > scenario.get("warn_ratio", 999):
+                severity = "amber"
+                summary = f"{metabolite} exceeds the conservative minor-metabolite review range."
+            if severity:
+                detail = f"Observed {format_percentage(ratio)} of {parent}"
+        elif scenario["kind"] == "impurity_max" and ratio is not None and m_value is not None and positive_with_cutoffs(m_value, metabolite, cutoff_map):
+            if ratio > scenario.get("warn_ratio", 999):
+                severity = "amber"
+                summary = f"{metabolite} is too high to be comfortably explained as trace impurity alone."
+                detail = f"Observed {format_percentage(ratio)} of {parent}"
+
+        if severity and summary:
+            seen.add(key)
+            cards.append(
+                {
+                    "severity": severity,
+                    "title": scenario["label"],
+                    "summary": summary,
+                    "detail": detail or "",
+                    "logic": scenario["explanation"],
+                    "source": "Pattern review",
+                }
+            )
+
+    return sorted(cards, key=lambda item: (-severity_rank(item["severity"]), item["title"]))
+
+def build_quick_actions(recent_runs: List[ReviewRun]) -> list[dict]:
+    if not recent_runs:
+        return []
+    latest = recent_runs[0]
+    flagged = next((run for run in recent_runs if run.flagged_accession_count), None)
+    actions = [
+        {
+            "title": "Open latest saved run",
+            "description": f"Run #{latest.id} Â· {latest.label}",
+            "href": url_for("run_detail", run_id=latest.id),
+            "tone": run_status(latest),
+        }
+    ]
+    if flagged:
+        actions.append(
+            {
+                "title": "Jump to flagged accessions",
+                "description": f"Run #{flagged.id} has {flagged.flagged_accession_count} accession(s) needing review",
+                "href": url_for("run_detail", run_id=flagged.id) + "#flagged-accessions",
+                "tone": run_status(flagged),
+            }
+        )
+    actions.append(
+        {
+            "title": "Review rule catalog",
+            "description": "See the color-coded rule logic and reviewer rationale",
+            "href": "#rule-catalog",
+            "tone": "info",
+        }
+    )
+    return actions
+
+
+RULE_LOOKUP = {item["rule_code"]: item for item in analyzer.RULE_CATALOG}
+
+
+
+DEFAULT_CUTOFFS = dict(analyzer.CUTOFFS)
+DEFAULT_RULE_CATALOG = [dict(item) for item in analyzer.RULE_CATALOG]
+DEFAULT_RULE_LOOKUP = {item["rule_code"]: item for item in DEFAULT_RULE_CATALOG}
+
+
+def get_effective_cutoffs(session) -> dict[str, float]:
+    rows = session.scalars(
+        select(RuntimeAnalyteThreshold).order_by(
+            RuntimeAnalyteThreshold.display_order.asc(),
+            RuntimeAnalyteThreshold.analyte.asc(),
+        )
+    ).all()
+    if not rows:
+        return dict(DEFAULT_CUTOFFS)
+
+    cutoff_map = dict(DEFAULT_CUTOFFS)
+    for row in rows:
+        if row.cutoff_value is not None:
+            cutoff_map[row.analyte] = float(row.cutoff_value)
+    return cutoff_map
+
+
+def get_effective_rule_catalog(session) -> list[dict]:
+    rows = session.scalars(
+        select(RuntimeRuleCatalog).order_by(
+            RuntimeRuleCatalog.sort_order.asc(),
+            RuntimeRuleCatalog.rule_code.asc(),
+        )
+    ).all()
+    if not rows:
+        return [dict(item) for item in DEFAULT_RULE_CATALOG]
+
+    catalog = []
+    for row in rows:
+        if not row.enabled:
+            continue
+        catalog.append(
+            {
+                "rule_code": row.rule_code,
+                "severity": row.severity,
+                "title": row.title,
+                "logic": row.logic_summary or "",
+                "rationale": row.reviewer_guidance or "",
+            }
+        )
+    return catalog
+
+
+def get_effective_rule_lookup(session) -> dict[str, dict]:
+    return {item["rule_code"]: item for item in get_effective_rule_catalog(session)}
+
+
+def positive_with_cutoffs(value, analyte: str, cutoff_map: dict[str, float] | None = None) -> bool:
+    numeric = safe_num(value)
+    if numeric is None:
+        return False
+    active_cutoffs = cutoff_map or DEFAULT_CUTOFFS
+    cutoff = active_cutoffs.get(analyte)
+    return numeric >= cutoff if cutoff is not None else True
+
+
+HEATMAP_ROWS = "ABCDEFGH"
+HEATMAP_COLS = list(range(1, 13))
+HEATMAP_DIRECT_WELL_RE = re.compile(r"^\s*([A-Ha-h])\s*(?:-|\s*)?([1-9]|1[0-2])\s*$")
+HEATMAP_TRAILING_VIAL_RE = re.compile(r":\s*(\d{1,3})\s*$")
+HEATMAP_ENDING_INT_RE = re.compile(r"(\d{1,3})\s*$")
+
+
+def vial_number_to_well(vial_number: int | None) -> str:
+    if vial_number is None:
+        return ""
+    if vial_number < 1 or vial_number > 96:
+        return ""
+    zero_based = vial_number - 1
+    row = HEATMAP_ROWS[zero_based // 12]
+    col = (zero_based % 12) + 1
+    return f"{row}{col}"
+
+
+def coerce_vial_number(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            numeric = int(value)
+        except Exception:
+            return None
+        return numeric if 1 <= numeric <= 96 else None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    match = HEATMAP_TRAILING_VIAL_RE.search(text)
+    if match:
+        numeric = int(match.group(1))
+        return numeric if 1 <= numeric <= 96 else None
+
+    match = HEATMAP_ENDING_INT_RE.search(text)
+    if match:
+        numeric = int(match.group(1))
+        return numeric if 1 <= numeric <= 96 else None
+
+    if text.isdigit():
+        numeric = int(text)
+        return numeric if 1 <= numeric <= 96 else None
+
+    return None
+
+
+def normalize_well_label(value: str | None) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    match = HEATMAP_DIRECT_WELL_RE.match(text)
+    if match:
+        return f"{match.group(1).upper()}{int(match.group(2))}"
+
+    vial_number = coerce_vial_number(text)
+    if vial_number is not None:
+        return vial_number_to_well(vial_number)
+
+    return ""
+
+
+def get_runtime_cutoff(session, analyte: str) -> float | None:
+    row = session.get(RuntimeAnalyteThreshold, analyte)
+    if row and row.enabled and row.cutoff_value is not None:
+        return float(row.cutoff_value)
+    cutoff = analyzer.CUTOFFS.get(analyte)
+    return float(cutoff) if cutoff is not None else None
+
+
+def heatmap_state(value: float | None, cutoff: float | None) -> str:
+    if value is None:
+        return "empty"
+    if cutoff is None or cutoff <= 0:
+        return "filled"
+    ratio = value / cutoff
+    if ratio >= 1.5:
+        return "red"
+    if ratio >= 1.0:
+        return "orange"
+    if ratio >= 0.5:
+        return "green"
+    return "low"
+
+
+def build_empty_heatmap_cells() -> list[dict]:
+    cells = []
+    for row in HEATMAP_ROWS:
+        for col in HEATMAP_COLS:
+            cells.append(
+                {
+                    "well": f"{row}{col}",
+                    "row": row,
+                    "col": col,
+                    "accession": "",
+                    "value": None,
+                    "state": "empty",
+                    "instrument": "",
+                    "source_file": "",
+                }
+            )
+    return cells
+
+
+def build_heatmap_payload(session, run_id: int, analyte: str) -> dict:
+    cutoff = get_runtime_cutoff(session, analyte)
+    cells = {cell["well"]: cell for cell in build_empty_heatmap_cells()}
+
+    stmt = (
+        select(Specimen, AnalyteResult)
+        .join(AnalyteResult, AnalyteResult.specimen_id == Specimen.id)
+        .where(Specimen.run_id == run_id, AnalyteResult.analyte == analyte)
+    )
+    rows = session.execute(stmt).all()
+
+    mapped_count = 0
+    for specimen, analyte_result in rows:
+        well = normalize_well_label(specimen.well_position)
+        if not well or well not in cells:
+            continue
+        mapped_count += 1
+        value = safe_num(analyte_result.value)
+        cells[well].update(
+            {
+                "accession": specimen.accession,
+                "value": value,
+                "state": heatmap_state(value, cutoff),
+                "instrument": specimen.instrument or "",
+                "source_file": specimen.source_file or "",
+            }
+        )
+
+    return {
+        "run_id": run_id,
+        "analyte": analyte,
+        "cutoff": cutoff,
+        "mapped_count": mapped_count,
+        "cells": [cells[f"{row}{col}"] for row in HEATMAP_ROWS for col in HEATMAP_COLS],
+        "message": (
+            "No mapped well positions were found for this run. This preview heatmap needs A1-H12 well_position values to color cells."
+            if mapped_count == 0
+            else f"Loaded {mapped_count} mapped well(s) for {analyte}."
+        ),
+    }
+
+
+
+
+POSITION_TEXT_HINTS = (
+    "sample vial position",
+    "vial position",
+    "well position",
+    "sample position",
+)
+
+POSITION_ORDER_HINTS = (
+    "sample order",
+    "vial number",
+    "position number",
+)
+
+
+def _norm_text(value) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value).strip()
+
+
+def build_position_lookup(long_df: pd.DataFrame) -> dict[tuple[str, str], str]:
+    if long_df is None or long_df.empty:
+        return {}
+
+    columns = list(long_df.columns)
+    lower_map = {str(col).strip().lower(): col for col in columns}
+    accession_col = lower_map.get("accession")
+    source_file_col = lower_map.get("source_file")
+
+    if accession_col is None:
+        return {}
+
+    text_cols = [
+        col for col in columns
+        if any(hint in str(col).strip().lower() for hint in POSITION_TEXT_HINTS)
+    ]
+    order_cols = [
+        col for col in columns
+        if any(hint in str(col).strip().lower() for hint in POSITION_ORDER_HINTS)
+    ]
+
+    lookup: dict[tuple[str, str], str] = {}
+
+    for _, row in long_df.iterrows():
+        accession = _norm_text(row.get(accession_col))
+        if not accession:
+            continue
+
+        source_file = _norm_text(row.get(source_file_col)) if source_file_col is not None else ""
+
+        well = ""
+        for col in text_cols:
+            raw = _norm_text(row.get(col))
+            if raw:
+                well = normalize_well_label(raw)
+                if well:
+                    break
+
+        if not well:
+            for col in order_cols:
+                vial_num = coerce_vial_number(row.get(col))
+                well = vial_number_to_well(vial_num)
+                if well:
+                    break
+
+        if well:
+            lookup[(accession, source_file)] = well
+            lookup.setdefault((accession, ""), well)
+
+    return lookup
+
+
+def resolve_specimen_well_position(accession: str, row: pd.Series, position_lookup: dict[tuple[str, str], str]) -> str:
+    accession = str(accession or "").strip()
+    source_file = str(row.get("source_file", "") or "").strip()
+
+    if not accession:
+        return ""
+
+    well = position_lookup.get((accession, source_file)) or position_lookup.get((accession, ""))
+    if well:
+        return well
+
+    direct_candidates = [
+        row.get("well_position", ""),
+        row.get("Well Position", ""),
+        row.get("Sample Vial Position", ""),
+        row.get("sample_vial_position", ""),
+        row.get("Vial Position", ""),
+        row.get("vial_position", ""),
+        row.get("Sample Order", ""),
+        row.get("sample_order", ""),
+    ]
+
+    for candidate in direct_candidates:
+        normalized = normalize_well_label(candidate)
+        if normalized:
+            return normalized
+
+    return ""
+
+
+def export_dataframe(df: pd.DataFrame, path: Path) -> None:
+    df.to_csv(path, index=False)
+
+
+
+def analyze_saved_files(saved_paths: List[Path], label: str = "") -> int:
+    session = SessionLocal()
+    discovered = analyzer.discover_excel_files([str(p) for p in saved_paths])
+    if not discovered:
+        raise ValueError("No .xlsx files were provided.")
+
+    effective_cutoffs = get_effective_cutoffs(session)
+    effective_rule_catalog = get_effective_rule_catalog(session)
+
+    old_cutoffs = dict(analyzer.CUTOFFS)
+    old_rule_catalog = [dict(item) for item in analyzer.RULE_CATALOG]
+
+    try:
+        analyzer.CUTOFFS = dict(effective_cutoffs)
+        analyzer.RULE_CATALOG = [dict(item) for item in effective_rule_catalog]
+
+        run_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
+        output_dir = OUTPUT_ROOT / run_slug
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        long_df = analyzer.build_long_table(discovered)
+        position_lookup = build_position_lookup(long_df)
+        wide_df = analyzer.build_wide_table(long_df)
+        flags_df = analyzer.apply_rules(wide_df)
+        local_refs_df = analyzer.local_reference_stats(wide_df)
+        metabolite_only_df = analyzer.expected_metabolite_only_summary(wide_df)
+        specimen_df = analyzer.specimen_summary_table(wide_df, flags_df)
+
+        report_path = output_dir / "lcms_parent_metabolite_report.html"
+        flags_csv_path = output_dir / "lcms_flags.csv"
+        summary_csv_path = output_dir / "lcms_accession_summary.csv"
+        local_refs_csv_path = output_dir / "lcms_local_ratio_reference.csv"
+
+        analyzer.render_report(discovered, wide_df, flags_df, local_refs_df, metabolite_only_df, specimen_df, report_path)
+        export_dataframe(flags_df, flags_csv_path)
+        export_dataframe(specimen_df, summary_csv_path)
+        export_dataframe(local_refs_df, local_refs_csv_path)
+        export_dataframe(metabolite_only_df, output_dir / "lcms_expected_metabolite_only.csv")
+    finally:
+        analyzer.CUTOFFS = old_cutoffs
+        analyzer.RULE_CATALOG = old_rule_catalog
+
+    bundle_base = OUTPUT_ROOT / f"{run_slug}_lcms_reviewer_outputs"
+    bundle_zip = shutil.make_archive(str(bundle_base), "zip", root_dir=output_dir)
+
+    run = ReviewRun(
+        label=label.strip() or f"Run {run_slug}",
+        status="completed",
+        file_count=len(discovered),
+        accession_count=int(wide_df["Sample Name"].nunique()),
+        flagged_accession_count=int(specimen_df[specimen_df["FlagCount"] > 0]["Accession"].nunique()),
+        red_count=int((flags_df["Severity"] == "red").sum()) if not flags_df.empty else 0,
+        amber_count=int((flags_df["Severity"] == "amber").sum()) if not flags_df.empty else 0,
+        upload_folder=str(saved_paths[0].parent),
+        output_folder=str(output_dir),
+        report_path=str(report_path),
+        flags_csv_path=str(flags_csv_path),
+        summary_csv_path=str(summary_csv_path),
+        local_refs_csv_path=str(local_refs_csv_path),
+        bundle_zip_path=str(bundle_zip),
+    )
+    session.add(run)
+    session.flush()
+
+    for file_path in discovered:
+        session.add(UploadedFile(run_id=run.id, original_name=file_path.name, stored_path=str(file_path)))
+
+    specimen_map = {}
+    analyte_columns = [c for c in wide_df.columns if c not in {"Sample Name", "instrument_id", "source_file", "batch_name", "run_date"}]
+    specimen_summary_lookup = {row["Accession"]: row for _, row in specimen_df.iterrows()}
+
+    for _, row in wide_df.iterrows():
+        accession = str(row["Sample Name"])
+        summary_row = specimen_summary_lookup.get(accession, {})
+        specimen = Specimen(
+            run_id=run.id,
+            accession=accession,
+            instrument=str(row.get("instrument_id", "") or ""),
+            source_file=str(row.get("source_file", "") or ""),
+            well_position=resolve_specimen_well_position(accession, row, position_lookup),
+            batch_name=str(row.get("batch_name", "") or ""),
+            run_date_text=str(row.get("run_date", "") or ""),
+            flag_count=int(summary_row.get("FlagCount", 0) or 0),
+            highest_severity=str(summary_row.get("HighestSeverity", "") or ""),
+            positive_analytes=str(summary_row.get("PositiveAnalytes", "") or ""),
+        )
+        session.add(specimen)
+        session.flush()
+        specimen_map[accession] = specimen
+
+        analyte_rows = []
+        for analyte in analyte_columns:
+            value = safe_num(row.get(analyte))
+            if value is None:
+                continue
+            analyte_rows.append(
+                AnalyteResult(
+                    specimen_id=specimen.id,
+                    analyte=analyte,
+                    value=value,
+                    is_positive=1 if positive_with_cutoffs(value, analyte, effective_cutoffs) else 0,
+                )
+            )
+        session.add_all(analyte_rows)
+
+    if not flags_df.empty:
+        for _, row in flags_df.iterrows():
+            specimen = specimen_map[str(row["Accession"])]
+            session.add(
+                Flag(
+                    specimen_id=specimen.id,
+                    severity=str(row.get("Severity", "") or ""),
+                    rule_code=str(row.get("RuleCode", "") or ""),
+                    flag_title=str(row.get("FlagTitle", "") or ""),
+                    analyte_a=str(row.get("AnalyteA", "") or ""),
+                    value_a=safe_num(row.get("ValueA")),
+                    analyte_b=str(row.get("AnalyteB", "") or ""),
+                    value_b=safe_num(row.get("ValueB")),
+                    ratio_name=str(row.get("RatioName", "") or ""),
+                    ratio_value=safe_num(row.get("RatioValue")),
+                    comment=str(row.get("Comment", "") or ""),
+                )
+            )
+
+    for _, row in local_refs_df.iterrows():
+        session.add(
+            LocalRatioReference(
+                run_id=run.id,
+                pair_label=str(row.get("Pair", "") or ""),
+                n_value=int(row.get("N", 0) or 0),
+                p05=safe_num(row.get("P05")),
+                median=safe_num(row.get("Median")),
+                p95=safe_num(row.get("P95")),
+            )
+        )
+
+    for _, row in metabolite_only_df.iterrows():
+        session.add(
+            MetaboliteOnlyPattern(
+                run_id=run.id,
+                pattern=str(row.get("Pattern", "") or ""),
+                count=int(row.get("Count", 0) or 0),
+                interpretation=str(row.get("Interpretation", "") or ""),
+            )
+        )
+
+    session.commit()
+    return run.id
+
+def save_uploaded_files(files: Iterable) -> List[Path]:
+    timestamp_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    upload_dir = UPLOAD_ROOT / timestamp_slug
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: List[Path] = []
+
+    for item in files:
+        if not item or not item.filename:
+            continue
+        cleaned_name = secure_filename(item.filename)
+        if not cleaned_name:
+            continue
+        if not allowed_file(cleaned_name):
+            raise ValueError(f"Unsupported file type for {item.filename}. Please upload .xlsx exports.")
+        target = upload_dir / cleaned_name
+        item.save(target)
+        saved_paths.append(target)
+    return saved_paths
+
+
+@app.template_filter("num")
+def format_number(value):
+    if value is None:
+        return ""
+    try:
+        return analyzer.fmt_num(float(value))
+    except Exception:
+        return str(value)
+
+
+@app.template_filter("ratio")
+def format_ratio(value):
+    if value is None:
+        return ""
+    try:
+        return analyzer.fmt_ratio(float(value))
+    except Exception:
+        return str(value)
+
+
+@app.template_filter("pct")
+def format_pct(value):
+    if value is None:
+        return ""
+    try:
+        return f"{float(value):.1f}%"
+    except Exception:
+        return str(value)
+
+
+
+
+
+def build_heatmap_run_options(recent_runs: list[ReviewRun]) -> list[dict]:
+    items: list[dict] = []
+    for run in recent_runs:
+        file_names = []
+        for uploaded in (run.uploaded_files or []):
+            name = str(getattr(uploaded, "original_name", "") or "").strip()
+            if name:
+                file_names.append(name)
+        first_file = file_names[0] if file_names else (run.label or f"Run {run.id}")
+        file_count = int(run.file_count or len(file_names) or 0)
+        accession_count = int(run.accession_count or 0)
+        created_text = run.created_at.strftime("%Y-%m-%d %H:%M") if getattr(run, "created_at", None) else ""
+
+        if file_count > 1:
+            label = f"#{run.id} — Batch upload ({file_count} files) — first file: {first_file} — {accession_count} accessions"
+        else:
+            label = f"#{run.id} — {first_file} — {accession_count} accessions"
+
+        if created_text:
+            label = f"{label} — {created_text}"
+
+        items.append({
+            "id": run.id,
+            "label": label,
+        })
+    return items
+
+
+@app.route("/", methods=["GET"])
+def dashboard():
+    session = SessionLocal()
+    effective_rule_catalog = get_effective_rule_catalog(session)
+    effective_rule_lookup = {item["rule_code"]: item for item in effective_rule_catalog}
+
+    totals = {
+        "runs": session.scalar(select(func.count(ReviewRun.id))) or 0,
+        "specimens": session.scalar(select(func.count(Specimen.id))) or 0,
+        "flags": session.scalar(select(func.count(Flag.id))) or 0,
+        "red": session.scalar(select(func.count(Flag.id)).where(Flag.severity == "red")) or 0,
+        "amber": session.scalar(select(func.count(Flag.id)).where(Flag.severity == "amber")) or 0,
+    }
+    recent_runs = session.scalars(select(ReviewRun).order_by(ReviewRun.created_at.desc()).limit(12)).all()
+    heatmap_runs = build_heatmap_run_options(recent_runs)
+    latest_flags = session.scalars(
+        select(Flag).join(Flag.specimen).join(Specimen.run).order_by(ReviewRun.created_at.desc(), Flag.id.desc()).limit(20)
+    ).all()
+    all_specimens = session.scalars(select(Specimen).order_by(Specimen.id.desc())).all()
+    all_flags = session.scalars(select(Flag).order_by(Flag.id.desc())).all()
+    instrument_summary = build_dashboard_instrument_summary(all_specimens)
+    hot_rules = build_flag_rule_summary(all_flags, rule_lookup=effective_rule_lookup, limit=5)
+    return render_template(
+        "dashboard.html",
+        totals=totals,
+        recent_runs=recent_runs,
+        latest_flags=latest_flags,
+        rule_catalog=effective_rule_catalog,
+        instrument_summary=instrument_summary,
+        hot_rules=hot_rules,
+        quick_actions=build_quick_actions(recent_runs),
+        heatmap_runs=heatmap_runs,
+    )
+
+
+@app.route("/upload", methods=["POST"])
+def upload_files():
+    files = request.files.getlist("files")
+    label = request.form.get("label", "")
+    if not files:
+        flash("Please choose one or more LCMS Excel exports.", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        saved_paths = save_uploaded_files(files)
+        if not saved_paths:
+            raise ValueError("No valid .xlsx files were uploaded.")
+        run_id = analyze_saved_files(saved_paths, label=label)
+        flash(f"Analysis complete. Run #{run_id} has been saved to the database.", "success")
+        return redirect(url_for("run_detail", run_id=run_id))
+    except Exception as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("dashboard"))
+
+
+
+@app.route("/runs/<int:run_id>")
+def run_detail(run_id: int):
+    session = SessionLocal()
+    run = session.get(ReviewRun, run_id)
+    if not run:
+        flash("Run not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    effective_rule_lookup = get_effective_rule_lookup(session)
+
+    specimens = session.scalars(
+        select(Specimen).where(Specimen.run_id == run_id).order_by(Specimen.flag_count.desc(), Specimen.accession.asc())
+    ).all()
+    refs = session.scalars(select(LocalRatioReference).where(LocalRatioReference.run_id == run_id).order_by(LocalRatioReference.pair_label.asc())).all()
+    patterns = session.scalars(select(MetaboliteOnlyPattern).where(MetaboliteOnlyPattern.run_id == run_id).order_by(MetaboliteOnlyPattern.pattern.asc())).all()
+    files = session.scalars(select(UploadedFile).where(UploadedFile.run_id == run_id).order_by(UploadedFile.original_name.asc())).all()
+    flags = session.scalars(
+        select(Flag).join(Flag.specimen).where(Specimen.run_id == run_id).order_by(Flag.severity.asc(), Specimen.accession.asc())
+    ).all()
+    flagged_specimens = [specimen for specimen in specimens if specimen.flag_count > 0][:10]
+    instrument_summary = build_instrument_summary(specimens, flags)
+    top_rules = build_flag_rule_summary(flags, rule_lookup=effective_rule_lookup, limit=8)
+    return render_template(
+        "run_detail.html",
+        run=run,
+        files=files,
+        specimens=specimens,
+        refs=refs,
+        patterns=patterns,
+        flags=flags,
+        rule_lookup=effective_rule_lookup,
+        instrument_summary=instrument_summary,
+        top_rules=top_rules,
+        flagged_specimens=flagged_specimens,
+        review_scenarios=REVIEW_SCENARIOS,
+        run_status=run_status(run),
+    )
+
+
+
+@app.route("/specimens/<int:specimen_id>")
+def specimen_detail(specimen_id: int):
+    session = SessionLocal()
+    specimen = session.get(Specimen, specimen_id)
+    if not specimen:
+        flash("Specimen not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    effective_rule_lookup = get_effective_rule_lookup(session)
+    effective_cutoffs = get_effective_cutoffs(session)
+
+    analytes = session.scalars(
+        select(AnalyteResult).where(AnalyteResult.specimen_id == specimen_id).order_by(AnalyteResult.is_positive.desc(), AnalyteResult.analyte.asc())
+    ).all()
+    flags = session.scalars(select(Flag).where(Flag.specimen_id == specimen_id).order_by(Flag.severity.asc(), Flag.id.asc())).all()
+    analyte_rows, analyte_values, analyte_counts = build_specimen_analyte_rows(analytes, cutoff_map=effective_cutoffs)
+    suspect_peak_cards = build_suspect_peak_cards(
+        analyte_rows,
+        analyte_values,
+        flags,
+        rule_lookup=effective_rule_lookup,
+        cutoff_map=effective_cutoffs,
+    )
+    return render_template(
+        "specimen_detail.html",
+        specimen=specimen,
+        analytes=analyte_rows,
+        flags=flags,
+        rule_lookup=effective_rule_lookup,
+        suspect_peak_cards=suspect_peak_cards,
+        analyte_counts=analyte_counts,
+        severity_labels=SEVERITY_LABELS,
+        review_scenarios=REVIEW_SCENARIOS,
+    )
+
+
+@app.route("/download/<int:run_id>/<string:asset>")
+def download_asset(run_id: int, asset: str):
+    session = SessionLocal()
+    run = session.get(ReviewRun, run_id)
+    if not run:
+        flash("Run not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    asset_map = {
+        "report": run.report_path,
+        "flags": run.flags_csv_path,
+        "summary": run.summary_csv_path,
+        "refs": run.local_refs_csv_path,
+        "bundle": run.bundle_zip_path,
+    }
+    target = asset_map.get(asset)
+    if not target or not Path(target).exists():
+        flash("Requested file is not available.", "error")
+        return redirect(url_for("run_detail", run_id=run_id))
+    return send_file(target, as_attachment=True)
+
+
+
+@app.route("/api/heatmap/analytes/<int:run_id>")
+def api_heatmap_analytes(run_id: int):
+    session = SessionLocal()
+    run = session.get(ReviewRun, run_id)
+    if not run:
+        return jsonify({"items": [], "error": "Run not found"}), 404
+
+    analytes = session.scalars(
+        select(AnalyteResult.analyte)
+        .join(Specimen, AnalyteResult.specimen_id == Specimen.id)
+        .where(Specimen.run_id == run_id)
+        .distinct()
+        .order_by(AnalyteResult.analyte.asc())
+    ).all()
+    return jsonify({"run_id": run_id, "items": analytes})
+
+
+@app.route("/api/heatmap/grid")
+def api_heatmap_grid():
+    run_id = request.args.get("run_id", type=int)
+    analyte = (request.args.get("analyte") or "").strip()
+
+    if not run_id:
+        return jsonify({"error": "Missing run_id"}), 400
+    if not analyte:
+        return jsonify({"error": "Missing analyte"}), 400
+
+    session = SessionLocal()
+    run = session.get(ReviewRun, run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+
+    payload = build_heatmap_payload(session, run_id, analyte)
+    pretty = build_heatmap_run_options([run])
+    payload["run_label"] = pretty[0]["label"] if pretty else (run.label or f"Run {run.id}")
+    return jsonify(payload)
+
+
+@app.route("/health")
+def health():
+    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+
+
+def seed_directory(sample_dir: str, label: str) -> int:
+    sample_paths = sorted(Path(sample_dir).glob("*.xlsx"))
+    if not sample_paths:
+        raise ValueError(f"No sample .xlsx files found in {sample_dir}")
+    copied_dir = UPLOAD_ROOT / ("seed_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    copied_dir.mkdir(parents=True, exist_ok=True)
+    copied_paths = []
+    for source in sample_paths:
+        target = copied_dir / source.name
+        shutil.copy2(source, target)
+        copied_paths.append(target)
+    return analyze_saved_files(copied_paths, label=label)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="LCMS reviewer web app")
+    parser.add_argument("--seed-dir", default="", help="Import all .xlsx files from this directory into the database before starting")
+    parser.add_argument("--seed-label", default="Seeded sample run", help="Label for seeded sample data")
+    parser.add_argument("--host", default=HOST)
+    parser.add_argument("--port", type=int, default=PORT)
+    args = parser.parse_args()
+
+    if args.seed_dir:
+        session = SessionLocal()
+        existing_runs = session.scalar(select(func.count(ReviewRun.id))) or 0
+        if existing_runs == 0:
+            run_id = seed_directory(args.seed_dir, args.seed_label)
+            print(f"Seeded sample data into run #{run_id}")
+        else:
+            print("Skipping seed import because runs already exist in the database.")
+
+    app.run(host=args.host, port=args.port, debug=False)
+
+
+if __name__ == "__main__":
+    main()
+

@@ -1,0 +1,27 @@
+LCMS Reviewer v4 deployment runbook for 10.117.1.148:4444
+
+Target service URL
+- http://10.117.1.148:4444/
+
+Stack
+- nginx listening on 4444
+- gunicorn app behind nginx
+- PostgreSQL 16
+- persistent Docker volumes for database and reviewer output storage
+- systemd service and backup timer included
+- v4 UI with color-coded dashboards, clickable drill-downs, LCMS1 vs LCMS2 instrument cards, and specimen-level suspect-peak review notes
+
+Recommended server path
+- /opt/lcms-reviewer
+
+Deployment summary
+1. Copy the project to /opt/lcms-reviewer
+2. cd /opt/lcms-reviewer/reviewer_app/prod_v4
+3. cp .env.example .env
+4. Edit .env secrets and passwords
+5. Run ./scripts/preflight_check.sh
+6. Run docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+7. Verify docker compose ps
+8. Verify http://10.117.1.148:4444/health
+9. Run ./scripts/post_deploy_smoke_test.sh
+10. Enable systemd service and backup timer if desired

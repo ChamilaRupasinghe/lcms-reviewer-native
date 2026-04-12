@@ -1,0 +1,22 @@
+Rollback plan
+
+If deployment fails before go-live
+1. docker compose --env-file .env -f docker-compose.prod.yml down
+2. Fix configuration or restore previous project copy
+3. Re-run preflight and redeploy
+
+If deployment fails after go-live
+1. Announce maintenance window to reviewers
+2. Run a fresh backup if database is still healthy
+3. docker compose --env-file .env -f docker-compose.prod.yml down
+4. Restore last known-good project version under /opt/lcms-reviewer
+5. If needed, restore database and app_data using restore_prod.sh
+6. Start stack again with docker compose up -d --build
+7. Run post_deploy_smoke_test.sh and verify sample upload
+8. Document incident and final backup used
+
+Minimum rollback assets to keep
+- previous application bundle
+- latest PostgreSQL dump
+- latest app_data archive
+- copy of prior .env file
