@@ -399,6 +399,7 @@ const SECTIONS = [
       {
         id: "q11", num: "11", type: "grid", required: true,
         text: "Do toxicology results currently influence the following decisions?",
+        rowHeader: "Decision",
         columns: [{ code: "yes", label: "Yes" }, { code: "no", label: "No" }, { code: "na", label: "N/A" }],
         rows: [
           { code: "medication_decisions", label: "Medication decisions" },
@@ -989,7 +990,7 @@ function renderGrid(q, qid) {
   const frag = document.createDocumentFragment();
   const table = el("table", { class: "grid" });
   const thead = el("thead", {}, [el("tr", {}, [
-    el("th", { scope: "col", text: q.rowHeader || "Scenario" }),
+    el("th", { scope: "col", text: q.rowHeader || "Item" }),
     ...q.columns.map(c => el("th", { scope: "col", text: c.label }))
   ])]);
   const tbody = el("tbody");
@@ -1000,7 +1001,8 @@ function renderGrid(q, qid) {
       tr.appendChild(el("td", {}, [el("label", {}, [
         el("span", { class: "sr", text: r.label + ": " + c.label }),
         el("input", {
-          type: "radio", name: qid + "_" + r.code, checked: checked || null,
+          type: "radio", name: qid + "_" + r.code, value: c.code,
+          id: qid + "_" + r.code + "_" + c.code, checked: checked || null,
           onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
         })
       ])]));
@@ -1018,7 +1020,8 @@ function renderGrid(q, qid) {
       const checked = a.rows[r.code] === c.code;
       go.appendChild(el("label", {}, [
         el("input", {
-          type: "radio", name: qid + "_m_" + r.code, checked: checked || null,
+          type: "radio", name: qid + "_m_" + r.code, value: c.code,
+          id: qid + "_m_" + r.code + "_" + c.code, checked: checked || null,
           "aria-label": r.label + ": " + c.label,
           onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
         }),
@@ -1057,7 +1060,8 @@ function renderMatrix(q, qid) {
       tr.appendChild(el("td", {}, [el("label", {}, [
         el("span", { class: "sr", text: r.label + ": " + c.label }),
         el("input", {
-          type: "radio", name: qid + "_" + r.code, checked: checked || null,
+          type: "radio", name: qid + "_" + r.code, value: c.code,
+          id: qid + "_" + r.code + "_" + c.code, checked: checked || null,
           onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
         })
       ])]));
@@ -1066,7 +1070,8 @@ function renderMatrix(q, qid) {
     tr.appendChild(el("td", {}, [el("label", {}, [
       el("span", { class: "sr", text: r.label + ": one of the three with most clinical value" }),
       el("input", {
-        type: "checkbox", checked: picked || null, disabled: (!picked && capReached) || null,
+        type: "checkbox", name: qid + "_top", value: r.code, id: qid + "_top_" + r.code,
+        checked: picked || null, disabled: (!picked && capReached) || null,
         "aria-describedby": qid + "_cap",
         onchange: (e) => toggleTop3(r.code, e.target.checked)
       })
@@ -1084,7 +1089,8 @@ function renderMatrix(q, qid) {
       const checked = a.rows[r.code] === c.code;
       go.appendChild(el("label", {}, [
         el("input", {
-          type: "radio", name: qid + "_m_" + r.code, checked: checked || null,
+          type: "radio", name: qid + "_m_" + r.code, value: c.code,
+          id: qid + "_m_" + r.code + "_" + c.code, checked: checked || null,
           "aria-label": r.label + ": " + c.label,
           onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
         }),
@@ -1094,7 +1100,8 @@ function renderMatrix(q, qid) {
     const picked = a.top3.includes(r.code);
     go.appendChild(el("label", {}, [
       el("input", {
-        type: "checkbox", checked: picked || null, disabled: (!picked && capReached) || null,
+        type: "checkbox", name: qid + "_mtop", value: r.code, id: qid + "_mtop_" + r.code,
+        checked: picked || null, disabled: (!picked && capReached) || null,
         "aria-label": r.label + ": one of the three with most clinical value",
         onchange: (e) => toggleTop3(r.code, e.target.checked)
       }),
@@ -1240,13 +1247,15 @@ function touch(rerender) {
   draft.durationSeconds = Math.round((Date.now() - draft.startedAt) / 1000);
   if (rerender) {
     const active = document.activeElement;
-    const key = active ? (active.id || (active.name + "|" + active.value)) : null;
+    const key = active && active.id ? active.id : (active ? (active.name + "|" + active.value) : null);
+    const sx = window.scrollX, sy = window.scrollY;
     renderSurvey();
     if (key) {
-      const again = $$("#surveyForm input, #surveyForm textarea")
-        .find(n => n.id === key || (n.name + "|" + n.value) === key);
-      if (again) again.focus();
+      const again = document.getElementById(key) || $$("#surveyForm input, #surveyForm textarea")
+        .find(n => (n.name + "|" + n.value) === key);
+      if (again) again.focus({ preventScroll: true });
     }
+    window.scrollTo(sx, sy);
   } else {
     updateProgress();
   }
@@ -2326,6 +2335,11 @@ async function init() {
   wireImport();
   wireSurveyControls();
   renderSurvey();
+  if (draft.mode === "interviewer") {
+    const box = $("#interviewerMode");
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+  }
   await refreshAnalytics();
   if (Store.loadDraft()) $("#saveNote").textContent = "Resumed your saved draft.";
 }

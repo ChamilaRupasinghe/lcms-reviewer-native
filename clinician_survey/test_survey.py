@@ -32,6 +32,26 @@ with sync_playwright() as p:
     check("storage mode is indexeddb over http", page.evaluate("Store.mode") == "indexeddb", page.evaluate("Store.mode"))
     check("section 6 locked initially", page.locator("#sec_s6 .lockmsg").count() == 1)
     check("q11 grid rendered", page.locator("#fs_q11 table.grid tbody tr").count() == 8)
+    q11_head = page.evaluate("() => document.querySelector('#fs_q11 table.grid thead th').textContent")
+    check("q11 row header names the decisions", q11_head == "Decision", q11_head)
+    s7 = page.evaluate("""() => {
+      const c = [...document.querySelectorAll('#sectionChips .chip')].find(n => n.textContent.includes('7. CLOSING'));
+      return c ? c.className : '';
+    }""")
+    check("section 7 not marked complete with no required answers", s7 == "chip", s7)
+    # Keyboard: a second Space must not move focus onto a different cell and overwrite the answer.
+    na = page.locator("#fs_q11 table.grid tbody tr").first.locator("input").nth(2)
+    na.focus()
+    page.keyboard.press("Space")
+    page.wait_for_timeout(80)
+    page.keyboard.press("Space")
+    page.wait_for_timeout(80)
+    kept = page.evaluate("""() => {
+      const a = document.activeElement;
+      return {stored: draft.answers.q11.rows.medication_decisions, id: a.id, checked: !!a.checked};
+    }""")
+    check("q11 keyboard answer stays on the cell that was used",
+          kept["stored"] == "na" and kept["checked"] and kept["id"] == "q11_medication_decisions_na", kept)
     check("q12b hidden initially", page.locator("#cond_q12b").is_hidden())
 
     # conditional: q12a selection reveals q12b
@@ -73,6 +93,18 @@ with sync_playwright() as p:
       draft.answers.q18 = { rows: Object.fromEntries(Q.q18.rows.map((r,i)=>[r.code, ['high','medium','low','no_value'][i%4]])), top3: [] };
       renderSurvey();
     }""")
+    later = page.locator("#fs_q18 table.grid tbody tr").nth(6).locator("input[type=checkbox]")
+    later.focus()
+    page.keyboard.press("Space")
+    page.wait_for_timeout(80)
+    top_focus = page.evaluate("""() => {
+      const a = document.activeElement;
+      return {top3: draft.answers.q18.top3, id: a.id, checked: !!a.checked};
+    }""")
+    check("q18 top-3 keyboard focus stays on the chosen row",
+          top_focus["top3"] == ["documentation_tools"] and top_focus["checked"] and top_focus["id"] == "q18_top_documentation_tools",
+          top_focus)
+    page.evaluate("() => { draft.answers.q18.top3 = []; renderSurvey(); }")
     boxes = page.locator("#fs_q18 table.grid tbody tr td:last-child input")
     for i in range(4):
         b = boxes.nth(i)
@@ -233,6 +265,20 @@ with sync_playwright() as p:
     mob.wait_for_timeout(700)
     check("no horizontal overflow on mobile dashboard", mob.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), mob.evaluate("document.documentElement.scrollWidth"))
     mob.screenshot(path=f"{MEDIA}/dashboard-mobile.png")
+
+    # interviewer mode survives a reload
+    iv = ctx.new_page()
+    iv.goto(URL)
+    iv.wait_for_selector("#surveyForm fieldset")
+    iv.locator("#interviewerMode").check()
+    iv.evaluate("saveDraftNow()")
+    iv.reload()
+    iv.wait_for_selector("#surveyForm fieldset")
+    iv.wait_for_timeout(300)
+    guide = iv.locator("#interviewerPanel").inner_text() if iv.locator("#interviewerPanel").is_visible() else ""
+    check("interviewer mode resumes with the guide",
+          iv.locator("#interviewerMode").is_checked() and "Do not describe Progressive Diagnostics" in guide, guide[:80])
+    iv.close()
 
     # file:// path exercises the localStorage fallback
     f = ctx.new_page()
