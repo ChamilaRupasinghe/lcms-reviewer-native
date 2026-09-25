@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinician Toxicology Survey</title>
+<style>
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --ink:#10212f; --ink-soft:#42596b; --line:#c9d4dc;
+  --accent:#0b4f6c; --accent-soft:#e3eef3; --focus:#b8480f; --ok:#0f6b45; --warn:#8a4b00;
+  --bad:#9b1c1c; --chart1:#0b4f6c; --chart2:#3f8ea8; --chart3:#7db8c9; --chart4:#cfe1e8;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+h1,h2,h3{line-height:1.25;margin:0 0 .4em}
+h1{font-size:1.35rem}h2{font-size:1.15rem}h3{font-size:1rem}
+p{margin:0 0 .8em}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:3px}
+.skip{position:absolute;left:-9999px;top:0;background:#fff;padding:.6em 1em;z-index:50}
+.skip:focus{left:8px;top:8px}
+.wrap{max-width:900px;margin:0 auto;padding:0 14px 72px}
+.dash .wrap,.rep .wrap,.data .wrap{max-width:1180px}
+header.app{background:var(--accent);color:#fff;padding:12px 0 0}
+header.app .wrap{padding-bottom:0}
+.brand{font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;opacity:.9;margin:0}
+header.app h1{color:#fff;font-size:1.2rem;margin:.15em 0 .5em}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs button{appearance:none;border:0;background:rgba(255,255,255,.12);color:#fff;
+  font:inherit;font-weight:600;font-size:.92rem;padding:.6em 1.05em;border-radius:7px 7px 0 0;cursor:pointer;min-height:44px}
+nav.tabs button[aria-selected="true"]{background:var(--bg);color:var(--accent)}
+nav.tabs button:hover{background:rgba(255,255,255,.24)}
+nav.tabs button[aria-selected="true"]:hover{background:var(--bg)}
+main{padding-top:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.muted{color:var(--ink-soft)}
+.small{font-size:.87rem}
+.tiny{font-size:.8rem}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+button.btn,label.btn{appearance:none;font:inherit;font-weight:600;min-height:44px;padding:.55em 1.1em;
+  border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;
+  display:inline-flex;align-items:center;gap:.4em}
+button.btn.ghost,label.btn.ghost{background:#fff;color:var(--accent)}
+button.btn.ghost:hover,label.btn.ghost:hover{background:var(--accent-soft)}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+button.linkish{background:none;border:0;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer;padding:.3em;min-height:44px}
+
+/* progress */
+.progressbar{height:9px;background:#dbe4ea;border-radius:5px;overflow:hidden}
+.progressbar span{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+@media (prefers-reduced-motion:reduce){.progressbar span{transition:none}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{font-size:.78rem;border:1px solid var(--line);border-radius:999px;padding:.25em .7em;background:#fff;color:var(--ink-soft)}
+.chip.done{border-color:var(--ok);color:var(--ok);font-weight:600}
+.chip.locked{opacity:.65}
+
+/* questions */
+fieldset.q{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0 0 14px;padding:14px}
+fieldset.q>legend{font-weight:600;padding:0 .35em;font-size:1rem}
+fieldset.q.invalid{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
+.qnum{color:var(--accent);font-weight:700}
+.qhelp{color:var(--ink-soft);font-size:.88rem;margin:.1em 0 .7em}
+.opts{display:grid;gap:8px}
+.opt{display:flex;gap:.65em;align-items:flex-start;border:1px solid var(--line);border-radius:8px;
+  padding:.6em .7em;background:#fff;cursor:pointer;min-height:44px}
+.opt:hover{background:var(--accent-soft)}
+.opt input{margin:.28em 0 0;width:20px;height:20px;flex:0 0 auto;accent-color:var(--accent)}
+.opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.opt.off{opacity:.5}
+.opt.off:hover{background:#fff}
+.opt span.t{flex:1}
+.otherwrap{margin:.45em 0 0 2em}
+input[type=text],input[type=email],textarea,select{font:inherit;color:var(--ink);background:#fff;
+  border:1px solid var(--line);border-radius:7px;padding:.55em .65em;width:100%;min-height:44px}
+textarea{min-height:96px;resize:vertical}
+.likert{display:grid;gap:8px}
+.err{color:var(--bad);font-weight:600;font-size:.88rem;margin:.5em 0 0}
+.note{border-left:4px solid var(--warn);background:#fff8ef;padding:.55em .75em;margin:.55em 0 0;font-size:.88rem}
+.cond{margin:.7em 0 0;padding:.7em .8em;border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0}
+.cond[hidden]{display:none}
+.capmsg{font-size:.85rem;font-weight:600;color:var(--accent);margin:.45em 0 0}
+
+/* grids */
+table.grid{width:100%;border-collapse:collapse;font-size:.92rem}
+table.grid th,table.grid td{border:1px solid var(--line);padding:.5em;text-align:center}
+table.grid th[scope=row]{text-align:left;font-weight:500;min-width:220px}
+table.grid thead th{background:var(--accent-soft);font-size:.85rem}
+table.grid td label{display:flex;align-items:center;justify-content:center;min-height:38px;cursor:pointer}
+table.grid input{width:20px;height:20px;accent-color:var(--accent)}
+.gridcards{display:none}
+.gridcard{border:1px solid var(--line);border-radius:8px;padding:.6em .7em;margin:0 0 8px;background:#fff}
+.gridcard .gl{font-weight:600;font-size:.92rem;margin:0 0 .45em}
+.gridcard .go{display:flex;gap:.5em;flex-wrap:wrap}
+.gridcard .go label{border:1px solid var(--line);border-radius:7px;padding:.35em .6em;display:flex;
+  gap:.35em;align-items:center;min-height:40px;cursor:pointer;font-size:.88rem}
+@media (max-width:640px){
+  table.grid{display:none}
+  .gridcards{display:block}
+}
+.locked{position:relative}
+.lockmsg{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:9px;padding:14px;margin:0 0 14px}
+
+/* dashboard */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:9px;padding:.7em .8em}
+.kpi .v{font-size:1.5rem;font-weight:700;color:var(--accent);line-height:1.15}
+.kpi .l{font-size:.8rem;color:var(--ink-soft)}
+.filters{position:sticky;top:0;z-index:20;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:12px;margin:0 0 16px}
+.filters .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.filters label.fl{display:block;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:0 0 .25em}
+.filters select[multiple]{min-height:96px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.tablewrap{overflow-x:auto;max-width:100%}
+table.data{width:100%;border-collapse:collapse;font-size:.88rem}
+table.data th,table.data td{border-bottom:1px solid var(--line);padding:.45em .5em;text-align:left;vertical-align:top}
+table.data th{background:var(--accent-soft);font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+table.data td.n,table.data th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.data tr:hover td{background:#f7fbfc}
+.bar{display:grid;grid-template-columns:minmax(120px,38%) 1fr auto;gap:.5em;align-items:center;
+  padding:.2em 0;font-size:.88rem}
+.bar .lab{overflow-wrap:anywhere}
+.bar .track{background:#e6edf1;border-radius:4px;height:16px}
+.bar .fill{display:block;background:var(--chart1);height:100%;border-radius:4px}
+.bar .val{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
+.stack{display:flex;height:22px;border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.stack i{display:block;height:100%}
+.legend{display:flex;gap:.8em;flex-wrap:wrap;font-size:.8rem;color:var(--ink-soft);margin:.4em 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:.3em;vertical-align:-1px}
+.verbatim{border-left:3px solid var(--line);padding:.3em 0 .3em .7em;margin:0 0 .6em;font-size:.9rem}
+.flag{display:inline-block;font-size:.75rem;font-weight:700;border-radius:4px;padding:.1em .45em;
+  background:#fdecec;color:var(--bad);margin-left:.4em}
+details.foot{margin:.6em 0 0;font-size:.85rem;color:var(--ink-soft)}
+.empty{padding:26px;text-align:center;color:var(--ink-soft)}
+.banner{border:1px solid var(--warn);background:#fff8ef;color:var(--warn);border-radius:9px;
+  padding:.7em .9em;margin:0 0 14px;font-size:.9rem;font-weight:600}
+.savenote{font-size:.83rem;color:var(--ink-soft)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pill{display:inline-block;font-size:.75rem;border-radius:999px;padding:.15em .6em;background:var(--accent-soft);color:var(--accent);font-weight:700}
+@media print{
+  header.app,nav.tabs,.filters,.noprint,footer.app{display:none !important}
+  body{background:#fff;font-size:11pt}
+  .card{border:0;padding:0;margin:0 0 14pt;break-inside:avoid}
+  .wrap{max-width:none;padding:0}
+  h2{break-after:avoid}
+  table.data{break-inside:auto}
+  tr{break-inside:avoid}
+}
+footer.app{padding:18px 0;color:var(--ink-soft);font-size:.83rem;text-align:center}
+</style>
+</head>
+<body class="svy">
+<a class="skip" href="#main">Skip to content</a>
+<header class="app">
+  <div class="wrap">
+    <p class="brand">Progressive Diagnostics &middot; Yale Clinician Study</p>
+    <h1>Clinician Toxicology Survey</h1>
+    <nav class="tabs" role="tablist" aria-label="Sections of this tool">
+      <button role="tab" id="tab-survey" aria-controls="panel-survey" aria-selected="true">Survey</button>
+      <button role="tab" id="tab-dash" aria-controls="panel-dash" aria-selected="false" tabindex="-1">Dashboard</button>
+      <button role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false" tabindex="-1">Report</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1">Data</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section id="panel-survey" role="tabpanel" aria-labelledby="tab-survey">
+    <div class="wrap">
+      <div id="storageBanner" class="banner" hidden></div>
+      <div class="card noprint">
+        <div class="spread">
+          <div style="flex:1;min-width:220px">
+            <div class="progressbar" role="progressbar" aria-labelledby="progLabel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><span></span></div>
+            <p id="progLabel" class="small muted" style="margin:.45em 0 0">0 of 0 required items answered</p>
+          </div>
+          <div class="row">
+            <label class="small" style="display:flex;gap:.4em;align-items:center;min-height:44px">
+              <input type="checkbox" id="interviewerMode" style="width:20px;height:20px">
+              Interviewer mode
+            </label>
+          </div>
+        </div>
+        <div class="chips" id="sectionChips"></div>
+        <p class="savenote" id="saveNote" aria-live="polite" style="margin:.7em 0 0">Draft not started</p>
+      </div>
+      <div id="interviewerPanel" hidden></div>
+      <form id="surveyForm" novalidate></form>
+      <div class="card noprint">
+        <div class="spread">
+          <div>
+            <p style="margin:0 0 .3em"><strong>Ready to submit?</strong></p>
+            <p class="small muted" style="margin:0">Partial responses are accepted and stored, and are reported separately from complete ones.</p>
+          </div>
+          <div class="row">
+            <button type="button" class="btn ghost" id="btnClearDraft">Clear draft</button>
+            <button type="button" class="btn" id="btnSubmit">Submit response</button>
+          </div>
+        </div>
+        <p class="err" id="submitErr" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-dash" role="tabpanel" aria-labelledby="tab-dash" hidden>
+    <div class="wrap"><div id="dashRoot"></div></div>
+  </section>
+
+  <section id="panel-report" role="tabpanel" aria-labelledby="tab-report" hidden>
+    <div class="wrap"><div id="reportRoot"></div></div>
+  </section>
+
+  <section id="panel-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+    <div class="wrap"><div id="dataRoot"></div></div>
+  </section>
+</main>
+
+<footer class="app"><div class="wrap">
+  Anonymous by default &middot; no patient information collected &middot; all data stays in this browser until you export it.
+</div></footer>
+
+<p class="sr" id="liveRegion" aria-live="polite" role="status"></p>
+<input type="file" id="importFile" accept=".json,.csv,application/json,text/csv" hidden>
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------
+   Instrument definition. Question and option text is reproduced
+   verbatim from the 9.17.26 source document; codes are frozen slugs
+   used by storage, exports and analytics.
+------------------------------------------------------------------ */
+
+const INSTRUMENT_ID = "yale-pd-clinician-tox-2026-09-17";
+const SCHEMA_VERSION = "1.0.0";
+
+const INTERVIEWER_TEXT = {
+  purpose: "To understand how clinicians select, interpret, and apply toxicology testing in substance use disorder care; where current workflows create gaps or unnecessary burden; and which laboratory capabilities would most improve patient safety, clinical decision-making, documentation, and efficiency. This is a customer needs-assessment discussion, not a sales conversation. Do not collect patient-specific or other protected health information.",
+  instructions: [
+    "Target length: 15\u201320 minutes.",
+    "Complete Sections 1\u20135 before introducing the proposed laboratory model.",
+    "Select all that apply unless otherwise noted; use prompts only when needed.",
+    "Capture the respondent\u2019s words where possible, especially examples and objections.",
+    "Do not describe Progressive Diagnostics capabilities until Section 6."
+  ],
+  introScript: "\u201cWe are evaluating how toxicology testing and laboratory support can be made more clinically useful, easier to apply, and better integrated into addiction treatment. We would value your perspective on training, testing decisions, how results are used, workflow challenges, and the role a laboratory should play in supporting the treatment team. There are no right or wrong answers; we want to understand what happens in day-to-day practice.\u201d"
+};
+
+const SECTION6_PREAMBLE = "\u201cWe are exploring a model where the toxicology laboratory works more interactively with the treatment team\u2014not directing care, but serving as a clinically useful partner by providing specialized toxicology expertise, longitudinal information, patient-safety insights, and decision support that is easier to apply in day-to-day practice.\u201d";
+
+const LIKERT5 = (l1, l2, l3, l4, l5) => [
+  { code: "1", label: l1, value: 1 }, { code: "2", label: l2, value: 2 },
+  { code: "3", label: l3, value: 3 }, { code: "4", label: l4, value: 4 },
+  { code: "5", label: l5, value: 5 }
+];
+
+const SECTIONS = [
+  {
+    id: "s1", num: 1, title: "ABOUT YOUR PRACTICE", questions: [
+      {
+        id: "q1", num: "1", type: "multi", required: true,
+        text: "What is your role?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "physician", label: "Physician" },
+          { code: "aprn_np", label: "APRN/NP" },
+          { code: "pa", label: "PA" },
+          { code: "medical_director", label: "Medical Director" },
+          { code: "lcsw_counselor_therapist", label: "LCSW / counselor / therapist" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q2", num: "2", type: "multi", required: true,
+        text: "What type of patients/settings do you primarily work with?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "otp", label: "OTP" },
+          { code: "iop", label: "IOP" },
+          { code: "general_outpatient_sud", label: "General outpatient SUD" },
+          { code: "residential_inpatient", label: "Residential/inpatient" },
+          { code: "pain_management", label: "Pain management" },
+          { code: "mental_health", label: "Mental health" },
+          { code: "primary_care", label: "Primary care" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q3", num: "3", type: "single", required: true,
+        text: "How long have you worked in addiction/SUD care?",
+        options: [
+          { code: "lt_2_years", label: "Less than 2 years" },
+          { code: "2_5_years", label: "2\u20135 years" },
+          { code: "6_10_years", label: "6\u201310 years" },
+          { code: "gt_10_years", label: "More than 10 years" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "s2", num: 2, title: "TRAINING & KNOWLEDGE", questions: [
+      {
+        id: "q4", num: "4", type: "multi", required: true,
+        text: "What training have you received in ordering and interpreting toxicology testing?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "medical_nursing_clinical_school", label: "Medical/nursing/clinical school" },
+          { code: "residency_fellowship", label: "Residency/fellowship" },
+          { code: "asam_professional_education", label: "ASAM or other professional education" },
+          { code: "employer_on_the_job", label: "Employer/on-the-job training" },
+          { code: "laboratory_provided", label: "Laboratory-provided training" },
+          { code: "self_directed_study", label: "Self-directed study" },
+          { code: "learned_through_experience", label: "Mostly learned through experience" },
+          { code: "no_formal_training", label: "No formal training", exclusive: true },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q5", num: "5", type: "likert", required: true,
+        text: "How confident do you feel interpreting toxicology results in your current practice?",
+        options: LIKERT5("1 Not confident", "2 Slightly", "3 Moderate", "4 Very", "5 Highly")
+      },
+      {
+        id: "q6", num: "6", type: "likert", required: true,
+        text: "How familiar are you with ASAM or other guidance on drug testing in addiction treatment?",
+        options: LIKERT5("1 Not familiar", "2 Slightly", "3 Moderate", "4 Very", "5 Highly")
+      },
+      {
+        id: "q7", num: "7", type: "multi", required: true,
+        text: "Which areas, if any, are difficult or unclear?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "screening_vs_definitive", label: "Screening vs. definitive testing" },
+          { code: "detection_windows", label: "Detection windows" },
+          { code: "cutoffs", label: "Cutoffs" },
+          { code: "parent_drugs_metabolites", label: "Parent drugs and metabolites" },
+          { code: "expected_vs_unexpected", label: "Expected vs. unexpected findings" },
+          { code: "drug_interactions", label: "Drug interactions" },
+          { code: "quantitative_results", label: "Quantitative results" },
+          { code: "longitudinal_trends", label: "Longitudinal trends" },
+          { code: "what_requires_follow_up", label: "Determining what requires clinical follow-up" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      }
+    ]
+  },
+  {
+    id: "s3", num: 3, title: "HOW TOXICOLOGY IS USED TODAY", questions: [
+      {
+        id: "q8a", num: "8A", type: "multi", required: true,
+        text: "How do you typically select what to test for?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "individual_drugs_medlist_pdmp", label: "Individual drugs/classes based on medication list and state PDMP" },
+          { code: "standard_program_panel", label: "Standard program panel" },
+          { code: "presumptive_screening_only", label: "Presumptive screening only" },
+          { code: "screening_then_definitive", label: "Screening followed by definitive testing when indicated" },
+          { code: "definitive_by_clinical_need", label: "Definitive testing based on clinical need or patient risk" },
+          { code: "lab_developed_protocol", label: "Laboratory-developed protocol or recommendation" },
+          { code: "payer_coverage_requirements", label: "Payer coverage requirements" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q8b", num: "8B", type: "multi", required: true,
+        text: "How do you determine testing frequency?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "patient_risk_level", label: "Patient risk level" },
+          { code: "stage_progress_in_treatment", label: "Stage/progress in treatment" },
+          { code: "clinical_judgment", label: "Clinical judgment" },
+          { code: "program_protocol", label: "Program protocol" },
+          { code: "asam_or_other_guidance", label: "ASAM or other guidance" },
+          { code: "regulatory_requirements", label: "Regulatory requirements" },
+          { code: "payer_policy", label: "Payer policy" },
+          { code: "fixed_schedule", label: "Fixed schedule" },
+          { code: "laboratory_recommendation", label: "Laboratory recommendation" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q9", num: "9", type: "single", required: true,
+        text: "Does test selection or frequency change as the patient\u2019s risk level or progress in treatment changes?",
+        options: [
+          { code: "yes_consistently", label: "Yes, consistently" },
+          { code: "sometimes", label: "Sometimes" },
+          { code: "no", label: "No" },
+          { code: "not_sure", label: "Not sure" }
+        ]
+      },
+      {
+        id: "q10", num: "10", type: "multi", required: true,
+        text: "When, if ever, would you act on a presumptive screening result before definitive testing is available?", instruction: "(Select all that apply.)",
+        options: [
+          { code: "never_wait_for_definitive", label: "Never; I wait for definitive testing", exclusive: true },
+          { code: "immediate_safety_concern", label: "Immediate patient-safety concern while definitive testing is pending" },
+          { code: "preliminary_discussion_only", label: "Preliminary patient discussion or counseling only" },
+          { code: "consistent_with_history", label: "Result is consistent with known medication/use history" },
+          { code: "definitive_unavailable", label: "Definitive testing is unavailable or not covered" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q11", num: "11", type: "grid", required: true,
+        text: "Do toxicology results currently influence the following decisions?",
+        rowHeader: "Decision",
+        columns: [{ code: "yes", label: "Yes" }, { code: "no", label: "No" }, { code: "na", label: "N/A" }],
+        rows: [
+          { code: "medication_decisions", label: "Medication decisions" },
+          { code: "counseling_discussion", label: "Counseling or patient discussion" },
+          { code: "level_of_care", label: "Level of care" },
+          { code: "patient_safety_intervention", label: "Patient-safety intervention" },
+          { code: "adherence_monitoring", label: "Adherence monitoring" },
+          { code: "relapse_recurrence_assessment", label: "Relapse/recurrence assessment" },
+          { code: "documentation_medical_necessity", label: "Documentation or medical necessity" },
+          { code: "testing_plan_frequency", label: "Testing plan or frequency" }
+        ]
+      },
+      {
+        id: "q12a", num: "12", type: "multi", required: false,
+        text: "When a result is difficult to interpret or act on, what usually creates the difficulty and what do you do next?",
+        instruction: "(Select all that apply.)",
+        subLabel: "What made it difficult?",
+        help: "Leave blank if difficult-to-interpret results are not something you encounter.",
+        options: [
+          { code: "unexpected_positive", label: "Unexpected positive finding" },
+          { code: "expected_medication_absent", label: "Expected medication was absent" },
+          { code: "screen_definitive_disagree", label: "Screen and definitive results did not agree" },
+          { code: "metabolite_cutoff_window_uncertainty", label: "Uncertainty about metabolite, cutoff, or detection window" },
+          { code: "multiple_drugs_interaction", label: "Multiple drugs or possible interaction" },
+          { code: "incomplete_medlist_pdmp", label: "Incomplete medication list or PDMP discrepancy" },
+          { code: "did_not_fit_presentation", label: "Result did not fit the clinical presentation" },
+          { code: "unclear_next_step", label: "Unclear next clinical step" },
+          { code: "other", label: "Other:", other: true }
+        ],
+        followUp: {
+          id: "q12b", type: "multi", dependsOn: "q12a", showWhen: { anySelected: true },
+          subLabel: "What did you do next?",
+          help: "Available once you have selected at least one source of difficulty.",
+          options: [
+            { code: "reviewed_chart_medlist_pdmp", label: "Reviewed chart, medication list, and/or PDMP" },
+            { code: "discussed_with_patient", label: "Discussed the result with the patient" },
+            { code: "contacted_lab_or_expert", label: "Contacted the laboratory or toxicology expert" },
+            { code: "consulted_colleague_director", label: "Consulted a colleague or medical director" },
+            { code: "ordered_repeated_definitive", label: "Ordered or repeated definitive testing" },
+            { code: "documented_and_monitored", label: "Documented and monitored" },
+            { code: "changed_treatment_or_loc", label: "Changed treatment or level of care" },
+            { code: "no_action_remained_uncertain", label: "Took no action / remained uncertain" },
+            { code: "other", label: "Other:", other: true }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    id: "s4", num: 4, title: "CURRENT GAPS & BARRIERS", questions: [
+      {
+        id: "q13", num: "13", type: "multi", required: true, max: 3,
+        text: "What are the biggest challenges you experience with toxicology testing today?", instruction: "(Select up to three.)",
+        options: [
+          { code: "time_workflow_burden", label: "Time or workflow burden" },
+          { code: "interpreting_results", label: "Interpreting results" },
+          { code: "knowing_what_to_order", label: "Knowing what to order" },
+          { code: "payer_restrictions", label: "Payer restrictions" },
+          { code: "medical_necessity_documentation", label: "Medical-necessity documentation" },
+          { code: "patient_cost", label: "Patient cost" },
+          { code: "technology_ehr_integration", label: "Technology or EHR integration" },
+          { code: "turnaround_time", label: "Turnaround time" },
+          { code: "access_to_lab_expertise", label: "Access to laboratory expertise" },
+          { code: "too_much_data", label: "Too much data without prioritization" },
+          { code: "too_little_context", label: "Too little clinically useful context" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q14", num: "14", type: "single", required: true,
+        text: "Do payer or coverage policies influence what you order, how often you test, or whether you obtain definitive testing?",
+        options: [
+          { code: "yes", label: "Yes" }, { code: "no", label: "No" },
+          { code: "not_sure_na", label: "Not sure / N/A" }
+        ],
+        followUp: {
+          id: "q14b", type: "multi", dependsOn: "q14", showWhen: { equals: "yes" },
+          subLabel: "If yes, select all that apply:",
+          options: [
+            { code: "what_is_ordered", label: "What is ordered" },
+            { code: "testing_frequency", label: "Testing frequency" },
+            { code: "definitive_testing", label: "Definitive testing" },
+            { code: "timing_of_care", label: "Timing of care" },
+            { code: "patient_cost", label: "Patient cost" }
+          ]
+        }
+      },
+      {
+        id: "q15", num: "15", type: "single", required: true,
+        text: "Do clinicians receive enough education to use toxicology results effectively in addiction treatment?",
+        options: [
+          { code: "yes", label: "Yes" }, { code: "no", label: "No" },
+          { code: "not_sure_na", label: "Not sure / N/A" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "s5", num: 5, title: "INTERACTION WITH THE LABORATORY", questions: [
+      {
+        id: "q16", num: "16", type: "single", required: true,
+        text: "How often do you communicate with your laboratory about interpretation of results?",
+        options: [
+          { code: "frequently", label: "Frequently" }, { code: "occasionally", label: "Occasionally" },
+          { code: "rarely", label: "Rarely" }, { code: "never", label: "Never" }
+        ],
+        followUp: {
+          id: "q16b", type: "multi", dependsOn: "q16", showWhen: { inList: ["rarely", "never"] },
+          subLabel: "If rarely/never, why?",
+          options: [
+            { code: "not_needed", label: "Not needed" },
+            { code: "dont_know_whom_to_contact", label: "Do not know whom to contact" },
+            { code: "slow_response", label: "Slow response" },
+            { code: "lab_does_not_offer_interpretation", label: "Lab does not offer interpretation" },
+            { code: "prefer_internal_colleagues", label: "Prefer internal colleagues" },
+            { code: "other", label: "Other:", other: true }
+          ]
+        }
+      },
+      {
+        id: "q17", num: "17", type: "multi", required: true, max: 3,
+        text: "Which information or expertise is currently difficult to access from your laboratory?", instruction: "(Select up to three.)",
+        options: [
+          { code: "lab_director_expert_access", label: "Timely access to a laboratory director or toxicology expert" },
+          { code: "interpretation_unexpected", label: "Interpretation of unexpected or inconsistent findings" },
+          { code: "screening_vs_definitive_guidance", label: "Screening vs. definitive testing guidance" },
+          { code: "metabolite_cutoff_window_support", label: "Metabolite, cutoff, or detection-window support" },
+          { code: "test_panel_selection_guidance", label: "Test or panel selection guidance" },
+          { code: "risk_based_frequency_guidance", label: "Risk-based testing frequency guidance" },
+          { code: "longitudinal_trend_summaries", label: "Longitudinal trend summaries" },
+          { code: "safety_interaction_alerts", label: "Patient-safety or drug-interaction alerts" },
+          { code: "medical_necessity_documentation_support", label: "Medical-necessity/documentation support" },
+          { code: "concise_clinician_education", label: "Concise clinician education" },
+          { code: "practice_level_analytics", label: "Practice-level analytics" },
+          { code: "nothing_difficult", label: "Nothing is difficult to access", exclusive: true },
+          { code: "other", label: "Other:", other: true }
+        ]
+      }
+    ]
+  },
+  {
+    id: "s6", num: 6, title: "TEST THE PROPOSED MODEL", gated: true, questions: [
+      {
+        id: "q18", num: "18", type: "matrix", required: true, top3: 3,
+        text: "How useful would each of the following be in your practice? Rate each and mark the three that would create the most clinical value or save the most time.",
+        rowHeader: "Potential laboratory support",
+        columns: [
+          { code: "high", label: "High", score: 3 }, { code: "medium", label: "Medium", score: 2 },
+          { code: "low", label: "Low", score: 1 }, { code: "no_value", label: "No value", score: 0 }
+        ],
+        rows: [
+          { code: "lab_director_expert_access", label: "Timely access to a laboratory director / toxicology expert" },
+          { code: "proactive_interpretation", label: "Proactive interpretation of unexpected or inconsistent findings" },
+          { code: "longitudinal_trends", label: "Longitudinal patient trends across multiple tests" },
+          { code: "safety_alerts", label: "Time-sensitive patient-safety alerts for dangerous combinations or unexpected results" },
+          { code: "risk_based_protocols", label: "Risk-based testing protocols that adjust with clinical status and treatment progress" },
+          { code: "panel_selection_support", label: "Decision support for appropriate test or panel selection" },
+          { code: "documentation_tools", label: "Documentation tools supporting clinical rationale and medical necessity" },
+          { code: "point_of_need_education", label: "Point-of-need education and workflow support" },
+          { code: "practice_analytics", label: "Practice-level analytics and trends" }
+        ]
+      },
+      {
+        id: "q19", num: "19", type: "single", required: true,
+        text: "We are considering radiology as a comparison: the treating clinician remains responsible for the patient, while the diagnostic specialist interprets the data and is available for consultation. How well does this analogy fit toxicology in addiction treatment?",
+        options: [
+          { code: "strong_fit", label: "Strong fit" }, { code: "partial_fit", label: "Partial fit" },
+          { code: "does_not_fit", label: "Does not fit" }, { code: "not_sure", label: "Not sure" }
+        ],
+        followUp: {
+          id: "q19b", type: "multi", dependsOn: "q19", showWhen: { always: true },
+          subLabel: "Which elements carry over?",
+          options: [
+            { code: "specialist_interpretation", label: "Specialist interpretation" },
+            { code: "consultation_access", label: "Consultation access" },
+            { code: "longitudinal_comparison", label: "Longitudinal comparison" },
+            { code: "actionable_reporting", label: "Actionable reporting" },
+            { code: "clinician_retains_decisions", label: "Clinician retains treatment decisions" },
+            { code: "none_other", label: "None / Other:", other: true, exclusive: true }
+          ]
+        }
+      },
+      {
+        id: "q20", num: "20", type: "multi", required: true,
+        text: "What, if anything, would concern you about a more interactive laboratory role? Where should the laboratory\u2019s role stop?",
+        instruction: "(Select all that apply.)",
+        options: [
+          { code: "lab_should_not_direct_treatment", label: "The laboratory should not direct treatment" },
+          { code: "liability_accountability", label: "Liability or accountability" },
+          { code: "alert_fatigue", label: "Alert fatigue or too much information" },
+          { code: "additional_workflow_burden", label: "Additional workflow burden" },
+          { code: "data_privacy_interoperability", label: "Data privacy or interoperability" },
+          { code: "cost_reimbursement", label: "Cost or reimbursement" },
+          { code: "patient_trust_stigma", label: "Patient trust or stigma" },
+          { code: "conflict_of_interest_overtesting", label: "Conflict of interest / risk of over-testing" },
+          { code: "no_significant_concern", label: "No significant concern", exclusive: true },
+          { code: "other", label: "Other:", other: true }
+        ]
+      },
+      {
+        id: "q21", num: "21", type: "single", required: true,
+        text: "What patient-facing role, if any, should the laboratory have?",
+        options: [
+          { code: "all_through_treating_provider", label: "All communication should remain through the treating provider" },
+          { code: "education_materials_for_provider_use", label: "Provide patient education materials for provider use" },
+          { code: "direct_education_with_consent", label: "Direct education with provider consent" },
+          { code: "discuss_with_provider_authorization", label: "Discuss results only with provider authorization" },
+          { code: "urgent_safety_under_protocol", label: "Direct communication for urgent safety issues under an agreed protocol" },
+          { code: "unsure_depends", label: "Unsure / depends on the situation" },
+          { code: "other", label: "Other:", other: true }
+        ]
+      }
+    ]
+  },
+  {
+    id: "s7", num: 7, title: "CLOSING", questions: [
+      {
+        id: "q22", num: "22", type: "text", required: false,
+        text: "If you could change ONE thing about how toxicology testing works today, what would it be?"
+      },
+      {
+        id: "q23", num: "23", type: "text", required: false,
+        text: "Is there anything we have not asked that you think is important?"
+      }
+    ]
+  }
+];
+
+const ALL_QUESTIONS = SECTIONS.flatMap(s => s.questions);
+const Q = Object.fromEntries(ALL_QUESTIONS.map(q => [q.id, q]));
+const FOLLOWUPS = Object.fromEntries(
+  ALL_QUESTIONS.filter(q => q.followUp).map(q => [q.followUp.id, q.followUp])
+);
+const REQUIRED_IDS = ALL_QUESTIONS.filter(q => q.required).map(q => q.id);
+const GATED_SECTION = SECTIONS.find(s => s.gated);
+const PREGATE_SECTIONS = SECTIONS.filter(s => s.num <= 5);
+
+function questionLabel(qid, code) {
+  const q = Q[qid] || FOLLOWUPS[qid];
+  if (!q) return code;
+  const opt = (q.options || []).find(o => o.code === code);
+  return opt ? opt.label : code;
+}
+function sectionOf(qid) {
+  const base = qid.replace(/b$/, "").replace(/^(q\d+)a?$/, "$1");
+  const s = SECTIONS.find(sec => sec.questions.some(q => q.id === qid || (q.followUp && q.followUp.id === qid) || q.id === base));
+  return s || SECTIONS[0];
+}
+
+/* ------------------------------------------------------------------
+   Storage: IndexedDB first, localStorage fallback, in-memory last.
+   file:// in Chrome blocks IndexedDB, so the fallback is a normal path,
+   not an error case.
+------------------------------------------------------------------ */
+
+const DB_NAME = "pd_tox_survey";
+const DB_STORE = "responses";
+const LS_KEY = "pdtox.responses.v1";
+const LS_DRAFT = "pdtox.draft.v1";
+const LS_META = "pdtox.meta.v1";
+
+const Store = {
+  mode: "memory",
+  db: null,
+  memory: new Map(),
+
+  async init() {
+    try {
+      this.db = await this.openIDB();
+      this.mode = "indexeddb";
+    } catch (e) {
+      try {
+        window.localStorage.setItem("pdtox.probe", "1");
+        window.localStorage.removeItem("pdtox.probe");
+        this.mode = "localstorage";
+      } catch (e2) {
+        this.mode = "memory";
+      }
+    }
+    return this.mode;
+  },
+
+  openIDB() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error("no indexeddb"));
+      let settled = false;
+      const req = indexedDB.open(DB_NAME, 1);
+      const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error("idb timeout")); } }, 2500);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE, { keyPath: "responseId" });
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
+      };
+      req.onsuccess = () => { if (!settled) { settled = true; clearTimeout(timer); resolve(req.result); } };
+      req.onerror = () => { if (!settled) { settled = true; clearTimeout(timer); reject(req.error || new Error("idb error")); } };
+      req.onblocked = () => { if (!settled) { settled = true; clearTimeout(timer); reject(new Error("idb blocked")); } };
+    });
+  },
+
+  idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(DB_STORE, mode);
+      const req = fn(tx.objectStore(DB_STORE));
+      tx.onerror = () => reject(tx.error);
+      if (req) { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }
+      else tx.oncomplete = () => resolve();
+    });
+  },
+
+  lsAll() {
+    try { return JSON.parse(window.localStorage.getItem(LS_KEY) || "[]"); } catch (e) { return []; }
+  },
+  lsWrite(list) { window.localStorage.setItem(LS_KEY, JSON.stringify(list)); },
+
+  async all() {
+    if (this.mode === "indexeddb") return (await this.idb("readonly", s => s.getAll())) || [];
+    if (this.mode === "localstorage") return this.lsAll();
+    return [...this.memory.values()];
+  },
+
+  async put(rec) {
+    if (this.mode === "indexeddb") return this.idb("readwrite", s => s.put(rec));
+    if (this.mode === "localstorage") {
+      const list = this.lsAll().filter(r => r.responseId !== rec.responseId);
+      list.push(rec); this.lsWrite(list); return;
+    }
+    this.memory.set(rec.responseId, rec);
+  },
+
+  async putMany(recs) { for (const r of recs) await this.put(r); },
+
+  async remove(id) {
+    if (this.mode === "indexeddb") return this.idb("readwrite", s => s.delete(id));
+    if (this.mode === "localstorage") return this.lsWrite(this.lsAll().filter(r => r.responseId !== id));
+    this.memory.delete(id);
+  },
+
+  async clearAll() {
+    if (this.mode === "indexeddb") return this.idb("readwrite", s => s.clear());
+    if (this.mode === "localstorage") return this.lsWrite([]);
+    this.memory.clear();
+  },
+
+  saveDraft(draft) {
+    try { window.localStorage.setItem(LS_DRAFT, JSON.stringify(draft)); } catch (e) { /* memory-only session */ }
+  },
+  loadDraft() {
+    try { return JSON.parse(window.localStorage.getItem(LS_DRAFT) || "null"); } catch (e) { return null; }
+  },
+  dropDraft() { try { window.localStorage.removeItem(LS_DRAFT); } catch (e) { /* nothing to drop */ } },
+
+  meta() {
+    try { return JSON.parse(window.localStorage.getItem(LS_META) || "{}"); } catch (e) { return {}; }
+  },
+  setMeta(obj) {
+    try { window.localStorage.setItem(LS_META, JSON.stringify({ ...this.meta(), ...obj })); } catch (e) { /* ignore */ }
+  }
+};
+
+/* ------------------------------ helpers ------------------------------ */
+
+const $ = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else if (k === "html") node.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of [].concat(children || [])) {
+    if (c === null || c === undefined || c === false) continue;
+    node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return node;
+}
+
+function uid(prefix) {
+  return (prefix || "r") + "-" + Date.now().toString(36) + "-" +
+    Math.random().toString(36).slice(2, 8);
+}
+
+function deviceId() {
+  const m = Store.meta();
+  if (m.deviceId) return m.deviceId;
+  const id = uid("d");
+  Store.setMeta({ deviceId: id });
+  return id;
+}
+
+function nowISO() { return new Date().toISOString(); }
+
+function announce(msg) {
+  const r = $("#liveRegion");
+  r.textContent = "";
+  window.setTimeout(() => { r.textContent = msg; }, 40);
+}
+
+function hashRecord(rec) {
+  const s = JSON.stringify(rec.answers || {}) + "|" + (rec.contact ? JSON.stringify(rec.contact) : "");
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16);
+}
+
+function downloadBlob(filename, mime, text) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function fmt(n, digits) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "\u2014";
+  return Number(n).toFixed(digits === undefined ? 2 : digits);
+}
+function pct(part, whole) { return whole ? Math.round((part / whole) * 1000) / 10 : 0; }
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ------------------------------------------------------------------
+   Survey rendering, conditional logic, validation, autosave.
+------------------------------------------------------------------ */
+
+let draft = null;
+let saveTimer = null;
+let showErrors = false;
+
+function blankAnswer(q) {
+  switch (q.type) {
+    case "multi": return { selected: [], other: "" };
+    case "single": return { value: "", other: "" };
+    case "likert": return { value: null };
+    case "grid": return { rows: {} };
+    case "matrix": return { rows: {}, top3: [] };
+    default: return { text: "" };
+  }
+}
+
+function newDraft() {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    instrument: INSTRUMENT_ID,
+    responseId: uid("r"),
+    deviceId: deviceId(),
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    submittedAt: null,
+    status: "draft",
+    startedAt: Date.now(),
+    durationSeconds: 0,
+    collector: "",
+    mode: "respondent",
+    contact: { name: "", email: "", organization: "" },
+    answers: {}
+  };
+}
+
+function ans(qid) {
+  const q = Q[qid] || FOLLOWUPS[qid];
+  if (!draft.answers[qid]) draft.answers[qid] = blankAnswer(q || { type: "multi" });
+  return draft.answers[qid];
+}
+
+function isAnswered(qid) {
+  const q = Q[qid] || FOLLOWUPS[qid];
+  const a = draft.answers[qid];
+  if (!q || !a) return false;
+  switch (q.type) {
+    case "multi": return a.selected && a.selected.length > 0;
+    case "single": return !!a.value;
+    case "likert": return a.value !== null && a.value !== undefined;
+    case "grid": return q.rows.every(r => !!a.rows[r.code]);
+    case "matrix": return q.rows.every(r => !!a.rows[r.code]);
+    default: return !!(a.text && a.text.trim());
+  }
+}
+
+function requiredProgress() {
+  const answered = REQUIRED_IDS.filter(isAnswered).length;
+  return { answered, total: REQUIRED_IDS.length };
+}
+
+function sectionComplete(section) {
+  return section.questions.filter(q => q.required).every(q => isAnswered(q.id));
+}
+
+function gateOpen() { return PREGATE_SECTIONS.every(sectionComplete); }
+
+function followUpVisible(fu) {
+  const parent = draft.answers[fu.dependsOn];
+  const w = fu.showWhen || {};
+  if (w.always) return true;
+  if (!parent) return false;
+  if (w.anySelected) return !!(parent.selected && parent.selected.length);
+  if (w.equals) return parent.value === w.equals;
+  if (w.inList) return w.inList.includes(parent.value);
+  return false;
+}
+
+/* ------------------------------ rendering ------------------------------ */
+
+function optionRow(opts) {
+  const { name, type, code, label, checked, disabled, onChange, describedBy } = opts;
+  const input = el("input", {
+    type, name, value: code, checked: checked || null, disabled: disabled || null,
+    "aria-describedby": describedBy || null, onchange: onChange
+  });
+  return el("label", {
+    class: "opt" + (checked ? " sel" : "") + (disabled && !checked ? " off" : "")
+  }, [input, el("span", { class: "t", text: label })]);
+}
+
+function otherInput(qid, sub, label) {
+  const a = ans(qid);
+  const id = qid + "_other";
+  return el("div", { class: "otherwrap" }, [
+    el("label", { class: "sr", for: id, text: label || "Other, please specify" }),
+    el("input", {
+      type: "text", id, value: a.other || "", placeholder: "Please specify",
+      "aria-label": label || "Other, please specify",
+      oninput: (e) => { ans(qid).other = e.target.value; touch(); }
+    })
+  ]);
+}
+
+function renderMulti(q, qid) {
+  const a = ans(qid);
+  const wrap = el("div", { class: "opts" });
+  const atCap = q.max && a.selected.length >= q.max;
+  q.options.forEach(o => {
+    const checked = a.selected.includes(o.code);
+    wrap.appendChild(optionRow({
+      name: qid, type: "checkbox", code: o.code, label: o.label, checked,
+      disabled: !checked && atCap,
+      describedBy: q.max ? qid + "_cap" : null,
+      onChange: (e) => {
+        const cur = ans(qid).selected;
+        if (e.target.checked) { if (!cur.includes(o.code)) cur.push(o.code); }
+        else { ans(qid).selected = cur.filter(c => c !== o.code); }
+        touch(true);
+      }
+    }));
+    if (o.other && checked) wrap.appendChild(otherInput(qid, null, o.label));
+  });
+  if (q.max) {
+    wrap.appendChild(el("p", {
+      class: "capmsg", id: qid + "_cap", "aria-live": "polite",
+      text: a.selected.length + " of " + q.max + " selected" + (atCap ? " \u2014 maximum reached" : "")
+    }));
+  }
+  const exclusive = q.options.filter(o => o.exclusive && a.selected.includes(o.code));
+  if (exclusive.length && a.selected.length > 1) {
+    wrap.appendChild(el("p", {
+      class: "note",
+      text: "\u201c" + exclusive[0].label + "\u201d is combined with other selections. Your answer is kept as entered \u2014 adjust it only if that was not what you meant."
+    }));
+  }
+  return wrap;
+}
+
+function renderSingle(q, qid, likert) {
+  const a = ans(qid);
+  const wrap = el("div", { class: likert ? "likert" : "opts" });
+  q.options.forEach(o => {
+    const val = likert ? o.value : o.code;
+    const checked = likert ? a.value === o.value : a.value === o.code;
+    wrap.appendChild(optionRow({
+      name: qid, type: "radio", code: o.code, label: o.label, checked,
+      onChange: () => { ans(qid).value = val; touch(true); }
+    }));
+    if (o.other && checked) wrap.appendChild(otherInput(qid, null, o.label));
+  });
+  return wrap;
+}
+
+function renderGrid(q, qid) {
+  const a = ans(qid);
+  const frag = document.createDocumentFragment();
+  const table = el("table", { class: "grid" });
+  const thead = el("thead", {}, [el("tr", {}, [
+    el("th", { scope: "col", text: q.rowHeader || "Item" }),
+    ...q.columns.map(c => el("th", { scope: "col", text: c.label }))
+  ])]);
+  const tbody = el("tbody");
+  q.rows.forEach(r => {
+    const tr = el("tr", {}, [el("th", { scope: "row", text: r.label })]);
+    q.columns.forEach(c => {
+      const checked = a.rows[r.code] === c.code;
+      tr.appendChild(el("td", {}, [el("label", {}, [
+        el("span", { class: "sr", text: r.label + ": " + c.label }),
+        el("input", {
+          type: "radio", name: qid + "_" + r.code, value: c.code,
+          id: qid + "_" + r.code + "_" + c.code, checked: checked || null,
+          onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
+        })
+      ])]));
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(thead); table.appendChild(tbody);
+  frag.appendChild(table);
+
+  const cards = el("div", { class: "gridcards" });
+  q.rows.forEach(r => {
+    const card = el("div", { class: "gridcard" }, [el("p", { class: "gl", text: r.label })]);
+    const go = el("div", { class: "go" });
+    q.columns.forEach(c => {
+      const checked = a.rows[r.code] === c.code;
+      go.appendChild(el("label", {}, [
+        el("input", {
+          type: "radio", name: qid + "_m_" + r.code, value: c.code,
+          id: qid + "_m_" + r.code + "_" + c.code, checked: checked || null,
+          "aria-label": r.label + ": " + c.label,
+          onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
+        }),
+        el("span", { text: c.label })
+      ]));
+    });
+    card.appendChild(go);
+    cards.appendChild(card);
+  });
+  frag.appendChild(cards);
+  return frag;
+}
+
+function renderMatrix(q, qid) {
+  const a = ans(qid);
+  const frag = document.createDocumentFragment();
+  const capReached = a.top3.length >= q.top3;
+
+  const table = el("table", { class: "grid" });
+  table.appendChild(el("thead", {}, [el("tr", {}, [
+    el("th", { scope: "col", text: q.rowHeader }),
+    ...q.columns.map(c => el("th", { scope: "col", text: c.label })),
+    el("th", { scope: "col", text: "Most value (pick 3)" })
+  ])]));
+  const tbody = el("tbody");
+  const toggleTop3 = (rowCode, on) => {
+    const t = ans(qid).top3;
+    if (on) { if (!t.includes(rowCode) && t.length < q.top3) t.push(rowCode); }
+    else ans(qid).top3 = t.filter(c => c !== rowCode);
+    touch(true);
+  };
+  q.rows.forEach(r => {
+    const tr = el("tr", {}, [el("th", { scope: "row", text: r.label })]);
+    q.columns.forEach(c => {
+      const checked = a.rows[r.code] === c.code;
+      tr.appendChild(el("td", {}, [el("label", {}, [
+        el("span", { class: "sr", text: r.label + ": " + c.label }),
+        el("input", {
+          type: "radio", name: qid + "_" + r.code, value: c.code,
+          id: qid + "_" + r.code + "_" + c.code, checked: checked || null,
+          onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
+        })
+      ])]));
+    });
+    const picked = a.top3.includes(r.code);
+    tr.appendChild(el("td", {}, [el("label", {}, [
+      el("span", { class: "sr", text: r.label + ": one of the three with most clinical value" }),
+      el("input", {
+        type: "checkbox", name: qid + "_top", value: r.code, id: qid + "_top_" + r.code,
+        checked: picked || null, disabled: (!picked && capReached) || null,
+        "aria-describedby": qid + "_cap",
+        onchange: (e) => toggleTop3(r.code, e.target.checked)
+      })
+    ])]));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  frag.appendChild(table);
+
+  const cards = el("div", { class: "gridcards" });
+  q.rows.forEach(r => {
+    const card = el("div", { class: "gridcard" }, [el("p", { class: "gl", text: r.label })]);
+    const go = el("div", { class: "go" });
+    q.columns.forEach(c => {
+      const checked = a.rows[r.code] === c.code;
+      go.appendChild(el("label", {}, [
+        el("input", {
+          type: "radio", name: qid + "_m_" + r.code, value: c.code,
+          id: qid + "_m_" + r.code + "_" + c.code, checked: checked || null,
+          "aria-label": r.label + ": " + c.label,
+          onchange: () => { ans(qid).rows[r.code] = c.code; touch(true); }
+        }),
+        el("span", { text: c.label })
+      ]));
+    });
+    const picked = a.top3.includes(r.code);
+    go.appendChild(el("label", {}, [
+      el("input", {
+        type: "checkbox", name: qid + "_mtop", value: r.code, id: qid + "_mtop_" + r.code,
+        checked: picked || null, disabled: (!picked && capReached) || null,
+        "aria-label": r.label + ": one of the three with most clinical value",
+        onchange: (e) => toggleTop3(r.code, e.target.checked)
+      }),
+      el("span", { text: "Most value" })
+    ]));
+    card.appendChild(go);
+    cards.appendChild(card);
+  });
+  frag.appendChild(cards);
+
+  frag.appendChild(el("p", {
+    class: "capmsg", id: qid + "_cap", "aria-live": "polite",
+    text: a.top3.length + " of " + q.top3 + " \u201cmost value\u201d items selected" + (capReached ? " \u2014 maximum reached" : "")
+  }));
+  return frag;
+}
+
+function renderText(q, qid) {
+  const a = ans(qid);
+  return el("textarea", {
+    id: qid + "_text", value: a.text || "", "aria-label": q.text,
+    oninput: (e) => { ans(qid).text = e.target.value; touch(); }
+  });
+}
+
+function renderBody(q, qid) {
+  switch (q.type) {
+    case "multi": return renderMulti(q, qid);
+    case "single": return renderSingle(q, qid, false);
+    case "likert": return renderSingle(q, qid, true);
+    case "grid": return renderGrid(q, qid);
+    case "matrix": return renderMatrix(q, qid);
+    default: return renderText(q, qid);
+  }
+}
+
+function renderQuestion(q) {
+  const invalid = showErrors && q.required && !isAnswered(q.id);
+  const fs = el("fieldset", { class: "q" + (invalid ? " invalid" : ""), id: "fs_" + q.id });
+  fs.appendChild(el("legend", {}, [
+    el("span", { class: "qnum", text: q.num + ". " }),
+    document.createTextNode(q.text),
+    q.instruction ? el("span", { class: "muted", text: " " + q.instruction }) : null,
+    q.required ? null : el("span", { class: "muted small", text: " (optional)" })
+  ]));
+  if (q.help) fs.appendChild(el("p", { class: "qhelp", text: q.help }));
+  if (q.subLabel) fs.appendChild(el("p", { class: "qhelp", text: q.subLabel }));
+  fs.appendChild(renderBody(q, q.id));
+  if (invalid) fs.appendChild(el("p", { class: "err", text: "This question needs an answer before the response counts as complete." }));
+
+  if (q.followUp) {
+    const fu = q.followUp;
+    const visible = followUpVisible(fu);
+    const box = el("div", { class: "cond", id: "cond_" + fu.id, hidden: !visible });
+    if (visible) {
+      box.appendChild(el("p", { class: "qhelp", style: "font-weight:600;color:var(--ink)", text: fu.subLabel }));
+      if (fu.help) box.appendChild(el("p", { class: "qhelp", text: fu.help }));
+      box.appendChild(renderBody(fu, fu.id));
+    }
+    fs.appendChild(box);
+  }
+  return fs;
+}
+
+function renderSurvey() {
+  const form = $("#surveyForm");
+  form.textContent = "";
+  const open = gateOpen();
+
+  SECTIONS.forEach(section => {
+    const card = el("section", { class: "card", id: "sec_" + section.id, "aria-labelledby": "h_" + section.id });
+    card.appendChild(el("h2", { id: "h_" + section.id },
+      [el("span", { class: "pill", text: "Section " + section.num }), " " + section.title]));
+
+    if (section.gated && !open) {
+      card.appendChild(el("div", { class: "lockmsg" }, [
+        el("p", { style: "margin:0 0 .3em;font-weight:600", text: "This section unlocks after Sections 1\u20135 are complete." }),
+        el("p", { class: "small muted", style: "margin:0", text: "The questions here describe a proposed way of working, and answering them earlier would colour how you describe your current practice." })
+      ]));
+      return form.appendChild(card);
+    }
+    if (section.gated && open) {
+      card.appendChild(el("div", { class: "cond", style: "border-left-color:var(--ok)" },
+        [el("p", { style: "margin:0", text: SECTION6_PREAMBLE })]));
+    }
+    section.questions.forEach(q => card.appendChild(renderQuestion(q)));
+    form.appendChild(card);
+  });
+
+  const extra = el("section", { class: "card" }, [
+    el("h2", { text: "Optional details" }),
+    el("p", { class: "small muted", text: "Everything here is optional. The survey is anonymous by default and collects no patient information." })
+  ]);
+  const grid = el("div", { class: "grid2" });
+  [["name", "Name"], ["email", "Email"], ["organization", "Organization"]].forEach(([k, label]) => {
+    grid.appendChild(el("div", {}, [
+      el("label", { class: "fl small", for: "c_" + k, style: "display:block;font-weight:600;margin:0 0 .25em", text: label }),
+      el("input", {
+        type: k === "email" ? "email" : "text", id: "c_" + k, value: draft.contact[k] || "",
+        oninput: (e) => { draft.contact[k] = e.target.value; touch(); }
+      })
+    ]));
+  });
+  grid.appendChild(el("div", {}, [
+    el("label", { class: "fl small", for: "c_collector", style: "display:block;font-weight:600;margin:0 0 .25em", text: "Collector / site label" }),
+    el("input", {
+      type: "text", id: "c_collector", value: draft.collector || "", placeholder: "e.g. site-a-tablet",
+      oninput: (e) => { draft.collector = e.target.value; touch(); }
+    })
+  ]));
+  extra.appendChild(grid);
+  form.appendChild(extra);
+
+  updateProgress();
+}
+
+function updateProgress() {
+  const { answered, total } = requiredProgress();
+  const p = total ? Math.round((answered / total) * 100) : 0;
+  const bar = $("#progBar");
+  bar.setAttribute("aria-valuenow", String(p));
+  $("span", bar).style.width = p + "%";
+  $("#progLabel").textContent = answered + " of " + total + " required items answered (" + p + "%)";
+
+  const chips = $("#sectionChips");
+  chips.textContent = "";
+  const open = gateOpen();
+  SECTIONS.forEach(s => {
+    const locked = s.gated && !open;
+    const hasRequired = s.questions.some(q => q.required);
+    const done = !locked && hasRequired && sectionComplete(s);
+    chips.appendChild(el("span", {
+      class: "chip" + (done ? " done" : "") + (locked ? " locked" : ""),
+      text: (locked ? "\u{1F512} " : done ? "\u2713 " : "") + s.num + ". " + s.title
+    }));
+  });
+}
+
+/* ------------------------------ persistence of the draft ------------------------------ */
+
+function touch(rerender) {
+  draft.updatedAt = nowISO();
+  draft.durationSeconds = Math.round((Date.now() - draft.startedAt) / 1000);
+  if (rerender) {
+    const active = document.activeElement;
+    const key = active && active.id ? active.id : (active ? (active.name + "|" + active.value) : null);
+    const sx = window.scrollX, sy = window.scrollY;
+    renderSurvey();
+    if (key) {
+      const again = document.getElementById(key) || $$("#surveyForm input, #surveyForm textarea")
+        .find(n => (n.name + "|" + n.value) === key);
+      if (again) again.focus({ preventScroll: true });
+    }
+    window.scrollTo(sx, sy);
+  } else {
+    updateProgress();
+  }
+  scheduleSave();
+}
+
+function scheduleSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(saveDraftNow, 600);
+}
+
+function saveDraftNow() {
+  Store.saveDraft(draft);
+  const t = new Date();
+  $("#saveNote").textContent = "Draft saved " + t.toLocaleTimeString();
+}
+
+/* ------------------------------ submit ------------------------------ */
+
+function buildRecord() {
+  const { answered, total } = requiredProgress();
+  const rec = JSON.parse(JSON.stringify(draft));
+  delete rec.startedAt;
+  rec.submittedAt = nowISO();
+  rec.updatedAt = rec.submittedAt;
+  rec.status = "submitted";
+  rec.complete = answered === total;
+  rec.requiredAnswered = answered;
+  rec.requiredTotal = total;
+  rec.durationSeconds = Math.round((Date.now() - draft.startedAt) / 1000);
+  rec.contentHash = hashRecord(rec);
+  return rec;
+}
+
+async function submitResponse(force) {
+  const { answered, total } = requiredProgress();
+  const errBox = $("#submitErr");
+  if (answered < total && !force) {
+    showErrors = true;
+    renderSurvey();
+    errBox.hidden = false;
+    errBox.textContent = (total - answered) + " required item(s) are still unanswered. Fix them, or submit as a partial response.";
+    const btn = el("button", { class: "linkish", type: "button", text: "Submit anyway as partial", onclick: () => submitResponse(true) });
+    errBox.appendChild(document.createTextNode(" "));
+    errBox.appendChild(btn);
+    const firstBad = REQUIRED_IDS.filter(id => !isAnswered(id))
+      .map(id => $("#fs_" + id)).filter(Boolean)[0];
+    if (firstBad) { firstBad.scrollIntoView({ block: "center" }); const i = $("input,textarea", firstBad); if (i) i.focus(); }
+    announce("Submission blocked: " + (total - answered) + " required items unanswered.");
+    return;
+  }
+  const rec = buildRecord();
+  await Store.put(rec);
+  Store.dropDraft();
+  errBox.hidden = true;
+  showErrors = false;
+  draft = newDraft();
+  renderSurvey();
+  $("#saveNote").textContent = "Response saved. A fresh blank survey is ready.";
+  announce("Response submitted and stored" + (rec.complete ? "" : " as a partial response") + ".");
+  await refreshAnalytics();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ------------------------------------------------------------------
+   Analytics: filtering, descriptive statistics, cross-tabs.
+   Every statistic carries its own N; missing answers drop pairwise.
+------------------------------------------------------------------ */
+
+let ALL = [];
+let FILTERS = { role: [], setting: [], tenure: [], status: "submitted" };
+
+const Stats = {
+  mean(v) { return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; },
+  median(v) {
+    if (!v.length) return null;
+    const s = [...v].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  },
+  sd(v) {
+    if (v.length < 2) return null;
+    const m = Stats.mean(v);
+    return Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / (v.length - 1));
+  },
+  min(v) { return v.length ? Math.min(...v) : null; },
+  max(v) { return v.length ? Math.max(...v) : null; },
+  describe(v) {
+    return { n: v.length, mean: Stats.mean(v), median: Stats.median(v), sd: Stats.sd(v), min: Stats.min(v), max: Stats.max(v) };
+  }
+};
+
+function matchesFilters(r) {
+  if (FILTERS.status === "submitted" && r.status !== "submitted") return false;
+  if (FILTERS.status === "complete" && !r.complete) return false;
+  const sel = (qid) => (r.answers[qid] && r.answers[qid].selected) || [];
+  if (FILTERS.role.length && !FILTERS.role.some(c => sel("q1").includes(c))) return false;
+  if (FILTERS.setting.length && !FILTERS.setting.some(c => sel("q2").includes(c))) return false;
+  if (FILTERS.tenure.length) {
+    const t = r.answers.q3 && r.answers.q3.value;
+    if (!FILTERS.tenure.includes(t)) return false;
+  }
+  return true;
+}
+
+function filtered() { return ALL.filter(matchesFilters); }
+
+function multiCounts(rows, qid) {
+  const q = Q[qid] || FOLLOWUPS[qid];
+  const counts = new Map(q.options.map(o => [o.code, 0]));
+  let respondents = 0;
+  const others = [];
+  rows.forEach(r => {
+    const a = r.answers[qid];
+    if (!a || !a.selected || !a.selected.length) return;
+    respondents++;
+    a.selected.forEach(c => counts.set(c, (counts.get(c) || 0) + 1));
+    if (a.other && a.other.trim()) others.push(a.other.trim());
+  });
+  return {
+    n: respondents,
+    others,
+    items: q.options.map(o => ({ code: o.code, label: o.label, count: counts.get(o.code) || 0 }))
+      .sort((a, b) => b.count - a.count)
+  };
+}
+
+function singleCounts(rows, qid) {
+  const q = Q[qid] || FOLLOWUPS[qid];
+  const counts = new Map(q.options.map(o => [o.code, 0]));
+  let n = 0;
+  const others = [];
+  rows.forEach(r => {
+    const a = r.answers[qid];
+    const v = a && (q.type === "likert" ? (a.value === null || a.value === undefined ? "" : String(a.value)) : a.value);
+    if (!v) return;
+    n++;
+    counts.set(v, (counts.get(v) || 0) + 1);
+    if (a.other && a.other.trim()) others.push(a.other.trim());
+  });
+  return {
+    n, others,
+    items: q.options.map(o => ({ code: o.code, label: o.label, count: counts.get(o.code) || 0 }))
+  };
+}
+
+function likertValues(rows, qid) {
+  return rows.map(r => r.answers[qid] && r.answers[qid].value)
+    .filter(v => typeof v === "number" && !Number.isNaN(v));
+}
+
+function gridSummary(rows, qid) {
+  const q = Q[qid];
+  return q.rows.map(row => {
+    const counts = Object.fromEntries(q.columns.map(c => [c.code, 0]));
+    let n = 0;
+    rows.forEach(r => {
+      const v = r.answers[qid] && r.answers[qid].rows && r.answers[qid].rows[row.code];
+      if (v && counts[v] !== undefined) { counts[v]++; n++; }
+    });
+    const denom = n - (counts.na || 0);
+    return { code: row.code, label: row.label, counts, n, pctYes: denom ? pct(counts.yes, denom) : null, denom };
+  }).sort((a, b) => (b.pctYes === null ? -1 : b.pctYes) - (a.pctYes === null ? -1 : a.pctYes));
+}
+
+function matrixSummary(rows, qid) {
+  const q = Q[qid];
+  const scoreOf = Object.fromEntries(q.columns.map(c => [c.code, c.score]));
+  return q.rows.map(row => {
+    const counts = Object.fromEntries(q.columns.map(c => [c.code, 0]));
+    const scores = [];
+    let top3 = 0, ratedN = 0, topN = 0;
+    rows.forEach(r => {
+      const a = r.answers[qid];
+      if (!a) return;
+      const v = a.rows && a.rows[row.code];
+      if (v && counts[v] !== undefined) { counts[v]++; ratedN++; scores.push(scoreOf[v]); }
+      if (a.top3 && a.top3.length) { topN++; if (a.top3.includes(row.code)) top3++; }
+    });
+    const hiMed = counts.high + counts.medium;
+    return {
+      code: row.code, label: row.label, counts, n: ratedN, topN,
+      top3, top3Pct: pct(top3, topN),
+      weightedMean: Stats.mean(scores),
+      highMedPct: pct(hiMed, ratedN)
+    };
+  }).sort((a, b) => (b.top3 - a.top3) || ((b.weightedMean || 0) - (a.weightedMean || 0)));
+}
+
+/* cross-tab: any of role/setting (multi) or single/likert questions on either axis */
+const XTAB_VARS = [
+  { id: "q1", label: "Role (Q1)", kind: "multi" },
+  { id: "q2", label: "Setting (Q2)", kind: "multi" },
+  { id: "q3", label: "Tenure (Q3)", kind: "single" },
+  { id: "q5", label: "Confidence interpreting results (Q5)", kind: "likert" },
+  { id: "q6", label: "ASAM familiarity (Q6)", kind: "likert" },
+  { id: "q9", label: "Testing adapts to risk (Q9)", kind: "single" },
+  { id: "q13", label: "Biggest challenges (Q13)", kind: "multi" },
+  { id: "q14", label: "Payer influence (Q14)", kind: "single" },
+  { id: "q15", label: "Education sufficient (Q15)", kind: "single" },
+  { id: "q16", label: "Lab communication (Q16)", kind: "single" },
+  { id: "q17", label: "Hard to access from lab (Q17)", kind: "multi" },
+  { id: "q19", label: "Radiology analogy fit (Q19)", kind: "single" }
+];
+
+function levelsOf(qid) {
+  const q = Q[qid];
+  if (q.type === "likert") return q.options.map(o => ({ code: String(o.value), label: o.label }));
+  return q.options.map(o => ({ code: o.code, label: o.label }));
+}
+
+function valuesFor(rec, qid) {
+  const q = Q[qid];
+  const a = rec.answers[qid];
+  if (!a) return [];
+  if (q.type === "multi") return a.selected || [];
+  if (q.type === "likert") return (a.value === null || a.value === undefined) ? [] : [String(a.value)];
+  return a.value ? [a.value] : [];
+}
+
+function crossTab(rows, rowVar, colVar) {
+  const rl = levelsOf(rowVar), cl = levelsOf(colVar);
+  const cells = new Map();
+  let total = 0;
+  const rowTotals = new Map(rl.map(l => [l.code, 0]));
+  const colTotals = new Map(cl.map(l => [l.code, 0]));
+  const rowNumeric = new Map(rl.map(l => [l.code, []]));
+  const colIsLikert = Q[colVar].type === "likert";
+  rows.forEach(r => {
+    const rv = valuesFor(r, rowVar), cv = valuesFor(r, colVar);
+    if (!rv.length || !cv.length) return;
+    rv.forEach(a => cv.forEach(b => {
+      const k = a + "||" + b;
+      cells.set(k, (cells.get(k) || 0) + 1);
+      rowTotals.set(a, (rowTotals.get(a) || 0) + 1);
+      colTotals.set(b, (colTotals.get(b) || 0) + 1);
+      total++;
+      if (colIsLikert) rowNumeric.get(a).push(Number(b));
+    }));
+  });
+  return {
+    rowLevels: rl.filter(l => rowTotals.get(l.code) > 0),
+    colLevels: cl,
+    get: (a, b) => cells.get(a + "||" + b) || 0,
+    rowTotal: (a) => rowTotals.get(a) || 0,
+    colTotal: (b) => colTotals.get(b) || 0,
+    rowMean: (a) => (colIsLikert ? Stats.mean(rowNumeric.get(a) || []) : null),
+    colIsLikert, total,
+    rowLabel: Q[rowVar].text, colLabel: Q[colVar].text
+  };
+}
+
+function kpis(rows) {
+  const submitted = rows.filter(r => r.status === "submitted");
+  const complete = submitted.filter(r => r.complete);
+  const durations = submitted.map(r => r.durationSeconds).filter(v => typeof v === "number" && v > 0);
+  return {
+    total: rows.length,
+    submitted: submitted.length,
+    complete: complete.length,
+    completionRate: pct(complete.length, submitted.length),
+    medianMinutes: durations.length ? Math.round((Stats.median(durations) / 60) * 10) / 10 : null,
+    q5: Stats.describe(likertValues(rows, "q5")),
+    q6: Stats.describe(likertValues(rows, "q6"))
+  };
+}
+
+/* ------------------------------------------------------------------
+   Export / import / merge
+------------------------------------------------------------------ */
+
+function csvCell(v) {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvJoin(rows) {
+  return "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
+const META_COLS = ["response_id", "instrument", "schema_version", "device_id", "collector",
+  "created_at", "submitted_at", "updated_at", "status", "complete", "duration_seconds"];
+
+function metaValues(r) {
+  return [r.responseId, r.instrument, r.schemaVersion, r.deviceId || "", r.collector || "",
+    r.createdAt, r.submittedAt || "", r.updatedAt, r.status, r.complete ? 1 : 0, r.durationSeconds || ""];
+}
+
+function wideCSV(rows) {
+  const header = [...META_COLS];
+  const getters = [];
+  const push = (col, fn) => { header.push(col); getters.push(fn); };
+
+  const allQs = ALL_QUESTIONS.flatMap(q => [q, q.followUp].filter(Boolean));
+  allQs.forEach(q => {
+    const qid = q.id;
+    if (q.type === "multi") {
+      q.options.forEach(o => push(qid + "__" + o.code, r => {
+        const a = r.answers[qid];
+        return a && a.selected ? (a.selected.includes(o.code) ? 1 : 0) : "";
+      }));
+      push(qid + "_n_selected", r => { const a = r.answers[qid]; return a && a.selected ? a.selected.length : ""; });
+      if (q.options.some(o => o.other)) push(qid + "__other_text", r => (r.answers[qid] || {}).other || "");
+    } else if (q.type === "single" || q.type === "likert") {
+      push(qid + "_code", r => { const a = r.answers[qid]; return a ? (a.value === null || a.value === undefined ? "" : a.value) : ""; });
+      push(qid + "_label", r => {
+        const a = r.answers[qid];
+        if (!a || a.value === null || a.value === undefined || a.value === "") return "";
+        const o = q.options.find(x => (q.type === "likert" ? x.value === a.value : x.code === a.value));
+        return o ? o.label : a.value;
+      });
+      if (q.type === "likert") push(qid + "_value", r => { const a = r.answers[qid]; return a && typeof a.value === "number" ? a.value : ""; });
+      if (q.options.some(o => o.other)) push(qid + "__other_text", r => (r.answers[qid] || {}).other || "");
+    } else if (q.type === "grid") {
+      q.rows.forEach(row => push(qid + "__" + row.code, r => ((r.answers[qid] || {}).rows || {})[row.code] || ""));
+    } else if (q.type === "matrix") {
+      q.rows.forEach(row => {
+        push(qid + "__" + row.code, r => ((r.answers[qid] || {}).rows || {})[row.code] || "");
+        push(qid + "__" + row.code + "_score", r => {
+          const v = ((r.answers[qid] || {}).rows || {})[row.code];
+          const c = q.columns.find(x => x.code === v);
+          return c ? c.score : "";
+        });
+        push(qid + "_top3__" + row.code, r => {
+          const a = r.answers[qid];
+          return a && a.top3 ? (a.top3.includes(row.code) ? 1 : 0) : "";
+        });
+      });
+    } else {
+      push(qid + "_text", r => (r.answers[qid] || {}).text || "");
+    }
+  });
+  push("contact_name", r => (r.contact || {}).name || "");
+  push("contact_email", r => (r.contact || {}).email || "");
+  push("contact_organization", r => (r.contact || {}).organization || "");
+
+  return csvJoin([header, ...rows.map(r => [...metaValues(r), ...getters.map(g => g(r))])]);
+}
+
+function longCSV(rows) {
+  const header = ["response_id", "submitted_at", "status", "complete", "role_list", "setting_list", "tenure",
+    "section", "question_id", "question_number", "question_text", "item_id", "item_text",
+    "answer_code", "answer_label", "answer_numeric", "is_other", "other_text"];
+  const out = [header];
+  const allQs = ALL_QUESTIONS.flatMap(q => [q, Object.assign({}, q.followUp, q.followUp ? { num: q.num + "b", text: q.followUp.subLabel, parent: q.id } : {})].filter(x => x && x.id));
+
+  rows.forEach(r => {
+    const roleList = ((r.answers.q1 || {}).selected || []).map(c => questionLabel("q1", c)).join("; ");
+    const setList = ((r.answers.q2 || {}).selected || []).map(c => questionLabel("q2", c)).join("; ");
+    const tenure = (r.answers.q3 || {}).value ? questionLabel("q3", r.answers.q3.value) : "";
+    const base = [r.responseId, r.submittedAt || "", r.status, r.complete ? 1 : 0, roleList, setList, tenure];
+
+    allQs.forEach(q => {
+      const sec = sectionOf(q.parent || q.id);
+      const secLabel = sec.num + ". " + sec.title;
+      const a = r.answers[q.id];
+      if (!a) return;
+      const row = (item_id, item_text, code, label, numeric, isOther, otherText) =>
+        out.push([...base, secLabel, q.id, q.num || "", q.text || q.subLabel || "", item_id, item_text,
+          code, label, numeric === null || numeric === undefined ? "" : numeric, isOther ? 1 : 0, otherText || ""]);
+
+      if (q.type === "multi") {
+        (a.selected || []).forEach(c => {
+          const o = q.options.find(x => x.code === c) || { label: c };
+          row(c, o.label, c, o.label, 1, !!o.other, o.other ? a.other : "");
+        });
+      } else if (q.type === "single" || q.type === "likert") {
+        if (a.value === null || a.value === undefined || a.value === "") return;
+        const o = q.options.find(x => (q.type === "likert" ? x.value === a.value : x.code === a.value));
+        row(q.id, q.text || "", a.value, o ? o.label : a.value,
+          q.type === "likert" ? a.value : "", !!(o && o.other), (o && o.other) ? a.other : "");
+      } else if (q.type === "grid") {
+        q.rows.forEach(rw => {
+          const v = (a.rows || {})[rw.code];
+          if (!v) return;
+          const c = q.columns.find(x => x.code === v);
+          row(rw.code, rw.label, v, c ? c.label : v, "", false, "");
+        });
+      } else if (q.type === "matrix") {
+        q.rows.forEach(rw => {
+          const v = (a.rows || {})[rw.code];
+          if (v) {
+            const c = q.columns.find(x => x.code === v);
+            row(rw.code, rw.label, v, c ? c.label : v, c ? c.score : "", false, "");
+          }
+          if (a.top3 && a.top3.includes(rw.code)) row(rw.code + "__top3", rw.label + " (most clinical value)", "top3", "Selected as top-3 value", 1, false, "");
+        });
+      } else if (a.text && a.text.trim()) {
+        row(q.id, q.text || "", "text", "", "", false, "");
+        out[out.length - 1][out[0].indexOf("answer_label")] = a.text.trim();
+      }
+    });
+  });
+  return csvJoin(out);
+}
+
+function exportJSON(rows) {
+  return JSON.stringify({
+    schemaVersion: SCHEMA_VERSION,
+    instrument: INSTRUMENT_ID,
+    exportedAt: nowISO(),
+    exportedFrom: deviceId(),
+    responseCount: rows.length,
+    responses: rows
+  }, null, 2);
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], cell = "", inQ = false;
+  const s = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQ) {
+      if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c !== ""));
+}
+
+function recordsFromWideCSV(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) return [];
+  const header = rows[0];
+  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+  const out = [];
+  rows.slice(1).forEach(cells => {
+    const get = (k) => (idx[k] === undefined ? "" : cells[idx[k]]);
+    const rec = {
+      schemaVersion: get("schema_version") || SCHEMA_VERSION,
+      instrument: get("instrument") || INSTRUMENT_ID,
+      responseId: get("response_id") || uid("r"),
+      deviceId: get("device_id"), collector: get("collector"),
+      createdAt: get("created_at") || nowISO(),
+      submittedAt: get("submitted_at") || null,
+      updatedAt: get("updated_at") || get("submitted_at") || nowISO(),
+      status: get("status") || "submitted",
+      complete: get("complete") === "1" || get("complete") === "true",
+      durationSeconds: Number(get("duration_seconds")) || 0,
+      contact: { name: get("contact_name"), email: get("contact_email"), organization: get("contact_organization") },
+      answers: {}
+    };
+    const allQs = ALL_QUESTIONS.flatMap(q => [q, q.followUp].filter(Boolean));
+    allQs.forEach(q => {
+      const qid = q.id;
+      if (q.type === "multi") {
+        const sel = q.options.filter(o => get(qid + "__" + o.code) === "1").map(o => o.code);
+        const other = get(qid + "__other_text");
+        if (sel.length || other) rec.answers[qid] = { selected: sel, other };
+      } else if (q.type === "single" || q.type === "likert") {
+        const v = get(qid + "_code");
+        const other = get(qid + "__other_text");
+        if (v !== "") rec.answers[qid] = { value: q.type === "likert" ? Number(v) : v, other };
+      } else if (q.type === "grid" || q.type === "matrix") {
+        const rowsObj = {};
+        q.rows.forEach(rw => { const v = get(qid + "__" + rw.code); if (v) rowsObj[rw.code] = v; });
+        const a = { rows: rowsObj };
+        if (q.type === "matrix") a.top3 = q.rows.filter(rw => get(qid + "_top3__" + rw.code) === "1").map(rw => rw.code);
+        if (Object.keys(rowsObj).length || (a.top3 && a.top3.length)) rec.answers[qid] = a;
+      } else {
+        const t = get(qid + "_text");
+        if (t) rec.answers[qid] = { text: t };
+      }
+    });
+    const req = REQUIRED_IDS.length;
+    rec.requiredTotal = req;
+    rec.contentHash = hashRecord(rec);
+    out.push(rec);
+  });
+  return out;
+}
+
+async function mergeRecords(incoming) {
+  const existing = await Store.all();
+  const byId = new Map(existing.map(r => [r.responseId, r]));
+  const report = { inserted: 0, updated: 0, skipped: 0, forked: 0, rejected: 0 };
+  const toWrite = [];
+  incoming.forEach(inc => {
+    if (!inc || !inc.responseId) { report.rejected++; return; }
+    if (inc.instrument && inc.instrument !== INSTRUMENT_ID) { report.rejected++; return; }
+    inc.contentHash = inc.contentHash || hashRecord(inc);
+    const cur = byId.get(inc.responseId);
+    if (!cur) { toWrite.push(inc); report.inserted++; return; }
+    const a = Date.parse(inc.updatedAt || 0), b = Date.parse(cur.updatedAt || 0);
+    if (a > b) { toWrite.push(inc); report.updated++; }
+    else if (a < b) report.skipped++;
+    else if ((cur.contentHash || hashRecord(cur)) === inc.contentHash) report.skipped++;
+    else {
+      const fork = { ...inc, responseId: inc.responseId + "-f" + Math.random().toString(36).slice(2, 6), mergedFrom: inc.responseId };
+      toWrite.push(fork); report.forked++;
+    }
+  });
+  await Store.putMany(toWrite);
+  return report;
+}
+
+/* ------------------------------------------------------------------
+   Dashboard, report and data views.
+------------------------------------------------------------------ */
+
+const PALETTE = ["var(--chart1)", "var(--chart2)", "var(--chart3)", "var(--chart4)"];
+
+function barList(items, denom, opts) {
+  const o = opts || {};
+  const max = Math.max(1, ...items.map(i => i.count));
+  const box = el("div");
+  items.forEach(i => {
+    if (o.hideZero && !i.count) return;
+    box.appendChild(el("div", { class: "bar" }, [
+      el("span", { class: "lab", text: i.label }),
+      el("span", { class: "track" }, [el("span", { class: "fill", style: "width:" + Math.round((i.count / max) * 100) + "%" })]),
+      el("span", { class: "val", text: i.count + (denom ? " (" + pct(i.count, denom) + "%)" : "") })
+    ]));
+  });
+  if (!box.childElementCount) box.appendChild(el("p", { class: "small muted", text: "No responses yet for this item." }));
+  return box;
+}
+
+function stackedBar(parts, total) {
+  const stack = el("div", { class: "stack" });
+  parts.forEach((p, i) => {
+    const w = total ? (p.count / total) * 100 : 0;
+    if (w <= 0) return;
+    stack.appendChild(el("i", {
+      style: "width:" + w + "%;background:" + PALETTE[i % PALETTE.length],
+      title: p.label + ": " + p.count + " (" + pct(p.count, total) + "%)"
+    }));
+  });
+  return stack;
+}
+
+function legend(labels) {
+  return el("p", { class: "legend" }, labels.map((l, i) =>
+    el("span", {}, [el("i", { style: "background:" + PALETTE[i % PALETTE.length] }), l])));
+}
+
+function card(title, children, subtitle) {
+  return el("section", { class: "card" }, [
+    el("h2", { text: title }),
+    subtitle ? el("p", { class: "small muted", text: subtitle }) : null,
+    ...[].concat(children)
+  ]);
+}
+
+function statTable(headers, rows) {
+  const t = el("table", { class: "data" });
+  t.appendChild(el("thead", {}, [el("tr", {}, headers.map(h =>
+    el("th", { class: h.num ? "n" : "", scope: "col", text: h.label || h })))]));
+  const tb = el("tbody");
+  rows.forEach(r => tb.appendChild(el("tr", {}, r.map((c, i) =>
+    el("td", { class: headers[i] && headers[i].num ? "n" : "" },
+      [typeof c === "object" && c !== null ? c : document.createTextNode(String(c))])))));
+  t.appendChild(tb);
+  return el("div", { class: "tablewrap" }, [t]);
+}
+
+/* ------------------------------ filters ------------------------------ */
+
+function renderFilters(rows) {
+  const box = el("div", { class: "filters noprint", role: "search", "aria-label": "Filter responses" });
+  const grid = el("div", { class: "fgrid" });
+
+  const multiSelect = (key, label, qid) => {
+    const q = Q[qid];
+    const sel = el("select", {
+      multiple: true, id: "f_" + key, size: 5,
+      onchange: (e) => {
+        FILTERS[key] = [...e.target.selectedOptions].map(o => o.value);
+        refreshViews();
+      }
+    });
+    q.options.forEach(o => sel.appendChild(el("option", {
+      value: o.code, selected: FILTERS[key].includes(o.code) || null, text: o.label
+    })));
+    return el("div", {}, [el("label", { class: "fl", for: "f_" + key, text: label }), sel]);
+  };
+
+  grid.appendChild(multiSelect("role", "Role (Q1)", "q1"));
+  grid.appendChild(multiSelect("setting", "Setting (Q2)", "q2"));
+  grid.appendChild(multiSelect("tenure", "Tenure (Q3)", "q3"));
+
+  const statusSel = el("select", {
+    id: "f_status",
+    onchange: (e) => { FILTERS.status = e.target.value; refreshViews(); }
+  }, [
+    el("option", { value: "submitted", selected: FILTERS.status === "submitted" || null, text: "Submitted responses" }),
+    el("option", { value: "complete", selected: FILTERS.status === "complete" || null, text: "Complete responses only" }),
+    el("option", { value: "all", selected: FILTERS.status === "all" || null, text: "All records (incl. partial)" })
+  ]);
+  grid.appendChild(el("div", {}, [el("label", { class: "fl", for: "f_status", text: "Included records" }), statusSel]));
+  box.appendChild(grid);
+  box.appendChild(el("div", { class: "spread", style: "margin-top:10px" }, [
+    el("p", { class: "small muted", style: "margin:0", text: "Showing " + rows.length + " of " + ALL.length + " stored records." }),
+    el("button", {
+      class: "btn ghost", type: "button", text: "Clear filters",
+      onclick: () => { FILTERS = { role: [], setting: [], tenure: [], status: "submitted" }; refreshViews(); }
+    })
+  ]));
+  return box;
+}
+
+/* ------------------------------ dashboard ------------------------------ */
+
+function renderDashboard() {
+  const root = $("#dashRoot");
+  root.textContent = "";
+  const rows = filtered();
+  root.appendChild(renderFilters(rows));
+
+  if (!rows.length) {
+    root.appendChild(el("div", { class: "card empty" }, [
+      el("p", { text: "No responses match the current filters." }),
+      el("p", { class: "small", text: "Submit a response, import a CSV/JSON export, or load the demo data from the Data tab." })
+    ]));
+    return;
+  }
+
+  const k = kpis(rows);
+  root.appendChild(card("Overview", [
+    el("div", { class: "kpis" }, [
+      ["Responses", k.total], ["Submitted", k.submitted], ["Complete", k.complete],
+      ["Completion rate", k.completionRate + "%"],
+      ["Median time", k.medianMinutes === null ? "\u2014" : k.medianMinutes + " min"],
+      ["Mean confidence (Q5)", fmt(k.q5.mean, 2) + " / 5"],
+      ["Mean ASAM familiarity (Q6)", fmt(k.q6.mean, 2) + " / 5"]
+    ].map(([l, v]) => el("div", { class: "kpi" }, [
+      el("div", { class: "v", text: String(v) }), el("div", { class: "l", text: l })
+    ])))
+  ]));
+
+  const comp = el("div", { class: "grid2" });
+  [["q1", "Role (Q1)"], ["q2", "Setting (Q2)"]].forEach(([qid, label]) => {
+    const c = multiCounts(rows, qid);
+    comp.appendChild(el("div", {}, [
+      el("h3", { text: label }),
+      el("p", { class: "tiny muted", text: "Multi-select: percentages are of the " + c.n + " respondents who answered, so they exceed 100%." }),
+      barList(c.items, c.n)
+    ]));
+  });
+  const tenure = singleCounts(rows, "q3");
+  comp.appendChild(el("div", {}, [el("h3", { text: "Tenure in addiction/SUD care (Q3)" }), barList(tenure.items, tenure.n)]));
+  root.appendChild(card("Who responded", comp));
+
+  root.appendChild(card("Confidence and familiarity (Q5, Q6)", [
+    statTable(
+      ["Question", { label: "N", num: true }, { label: "Mean", num: true }, { label: "Median", num: true },
+        { label: "SD", num: true }, { label: "Min", num: true }, { label: "Max", num: true }],
+      [["Q5 Confidence interpreting toxicology results", k.q5.n, fmt(k.q5.mean), fmt(k.q5.median, 1), fmt(k.q5.sd), k.q5.min ?? "\u2014", k.q5.max ?? "\u2014"],
+      ["Q6 Familiarity with ASAM or other guidance", k.q6.n, fmt(k.q6.mean), fmt(k.q6.median, 1), fmt(k.q6.sd), k.q6.min ?? "\u2014", k.q6.max ?? "\u2014"]]
+    ),
+    ...["q5", "q6"].map(qid => {
+      const c = singleCounts(rows, qid);
+      return el("div", { style: "margin-top:14px" }, [
+        el("h3", { text: Q[qid].num + ". " + Q[qid].text }),
+        stackedBar(c.items, c.n),
+        legend(c.items.map(i => i.label + " (" + i.count + ")"))
+      ]);
+    }),
+    el("p", { class: "tiny muted", text: "SD is the sample standard deviation (n\u22121). Statistics are computed on respondents who answered that item." })
+  ], "1\u20135 scales, treated as ordinal and summarised descriptively."));
+
+  const g = gridSummary(rows, "q11");
+  root.appendChild(card("Q11 \u2014 Where toxicology results already change decisions", [
+    el("div", {}, g.map(r => el("div", { style: "margin:0 0 10px" }, [
+      el("div", { class: "spread" }, [
+        el("strong", { class: "small", text: r.label }),
+        el("span", { class: "tiny muted", text: r.pctYes === null ? "no data" : r.pctYes + "% yes of " + r.denom + " applicable (N=" + r.n + ")" })
+      ]),
+      stackedBar(Q.q11.columns.map(c => ({ label: c.label, count: r.counts[c.code] })), r.n)
+    ]))),
+    legend(Q.q11.columns.map(c => c.label))
+  ], "Sorted by share answering Yes, excluding N/A from the denominator."));
+
+  const m = matrixSummary(rows, "q18");
+  root.appendChild(card("Q18 \u2014 Value ranking of proposed laboratory support", [
+    statTable(
+      ["Capability", { label: "Top-3 picks", num: true }, { label: "% of respondents", num: true },
+        { label: "Weighted mean", num: true }, { label: "High+Medium", num: true }, { label: "N rated", num: true }],
+      m.map(r => [r.label, r.top3, r.top3Pct + "%", fmt(r.weightedMean), r.highMedPct + "%", r.n])
+    ),
+    el("div", { style: "margin-top:14px" }, m.map(r => el("div", { style: "margin:0 0 8px" }, [
+      el("div", { class: "tiny", text: r.label }),
+      stackedBar(Q.q18.columns.map(c => ({ label: c.label, count: r.counts[c.code] })), r.n)
+    ]))),
+    legend(Q.q18.columns.map(c => c.label)),
+    el("p", { class: "tiny muted", text: "Weighted mean scores High=3, Medium=2, Low=1, No value=0. Ranked by top-3 count, ties broken by weighted mean." })
+  ]));
+
+  const concern = multiCounts(rows, "q20");
+  const coi = concern.items.find(i => i.code === "conflict_of_interest_overtesting");
+  if (coi) {
+    root.appendChild(card("Counterweight \u2014 stated concerns about a more interactive laboratory role (Q20)", [
+      el("p", { class: "small", html: "<strong>" + coi.count + " of " + concern.n + "</strong> respondents (" + pct(coi.count, concern.n) + "%) named <em>conflict of interest / risk of over-testing</em>." }),
+      barList(concern.items, concern.n, { hideZero: true })
+    ], "Shown next to the Q18 ranking so enthusiasm for new capability is read alongside its stated risks."));
+  }
+
+  const barrierBox = el("div", { class: "grid2" });
+  const q13 = multiCounts(rows, "q13");
+  barrierBox.appendChild(el("div", {}, [
+    el("h3", { text: "Top barriers today (Q13, up to 3 each)" }), barList(q13.items, q13.n, { hideZero: true }),
+    q13.others.length ? el("details", { class: "foot" }, [el("summary", { text: "Other, specified (" + q13.others.length + ")" }),
+    ...q13.others.map(t => el("p", { class: "verbatim", text: t }))]) : null
+  ]));
+  const q7 = multiCounts(rows, "q7");
+  barrierBox.appendChild(el("div", {}, [
+    el("h3", { text: "Difficult or unclear areas (Q7)" }), barList(q7.items, q7.n, { hideZero: true })
+  ]));
+  root.appendChild(card("What gets in the way", barrierBox));
+
+  const supportBox = el("div", { class: "grid2" });
+  const q17 = multiCounts(rows, "q17");
+  supportBox.appendChild(el("div", {}, [
+    el("h3", { text: "Hard to access from the laboratory today (Q17, up to 3 each)" }), barList(q17.items, q17.n, { hideZero: true })
+  ]));
+  supportBox.appendChild(el("div", {}, [
+    el("h3", { text: "Most requested support (Q18 top-3 picks)" }),
+    barList(m.map(r => ({ label: r.label, count: r.top3 })), m.length ? m[0].topN : 0, { hideZero: true })
+  ]));
+  root.appendChild(card("What is being asked for", supportBox,
+    "The access gap reported in Section 5 sits beside the capability demand from Section 6."));
+
+  root.appendChild(renderCrossTabs(rows));
+
+  const freq = el("div");
+  const simpleQs = ALL_QUESTIONS.flatMap(q => [q, q.followUp].filter(Boolean))
+    .filter(q => ["multi", "single", "likert"].includes(q.type) && !["q1", "q2", "q3", "q5", "q6", "q7", "q13", "q17", "q20"].includes(q.id));
+  simpleQs.forEach(q => {
+    const c = q.type === "multi" ? multiCounts(rows, q.id) : singleCounts(rows, q.id);
+    freq.appendChild(el("div", { style: "margin:0 0 16px" }, [
+      el("h3", { text: (q.num ? q.num + ". " : "") + (q.text || q.subLabel) }),
+      el("p", { class: "tiny muted", text: "N = " + c.n + (q.type === "multi" ? " respondents; multi-select" : "") }),
+      barList(c.items, c.n, { hideZero: q.type === "multi" }),
+      c.others && c.others.length ? el("details", { class: "foot" }, [
+        el("summary", { text: "Other, specified (" + c.others.length + ")" }),
+        ...c.others.map(t => el("p", { class: "verbatim", text: t }))
+      ]) : null
+    ]));
+  });
+  root.appendChild(card("All remaining distributions", freq,
+    "Q14 and Q15 collapse \u201cNot sure\u201d and \u201cN/A\u201d into a single option in the source instrument, so those two cannot be separated here."));
+
+  const verb = el("div");
+  ["q22", "q23"].forEach(qid => {
+    const texts = rows.map(r => (r.answers[qid] || {}).text).filter(t => t && t.trim());
+    verb.appendChild(el("div", { style: "margin:0 0 14px" }, [
+      el("h3", { text: Q[qid].num + ". " + Q[qid].text }),
+      el("p", { class: "tiny muted", text: texts.length + " of " + rows.length + " respondents answered." }),
+      ...texts.map(t => el("p", { class: "verbatim", text: t }))
+    ]));
+  });
+  root.appendChild(card("Free-text responses", verb));
+}
+
+let XTAB_ROW = "q1", XTAB_COL = "q5";
+
+function xtabTable(rows, rowVar, colVar) {
+  const x = crossTab(rows, rowVar, colVar);
+  if (!x.rowLevels.length) return el("p", { class: "small muted", text: "Not enough data for this cross-tab." });
+  const head = [Q[rowVar].text, ...x.colLevels.map(c => ({ label: c.label, num: true })),
+    { label: "N", num: true }];
+  if (x.colIsLikert) head.push({ label: "Mean", num: true });
+  const body = x.rowLevels.map(r => {
+    const cells = x.colLevels.map(c => {
+      const n = x.get(r.code, c.code);
+      const tot = x.rowTotal(r.code);
+      const span = el("span", {}, [
+        document.createTextNode(n + " (" + pct(n, tot) + "%)"),
+        n > 0 && n < 3 ? el("span", { class: "flag", title: "Cell count below 3", text: "n<3" }) : null
+      ]);
+      return span;
+    });
+    const out = [r.label, ...cells, x.rowTotal(r.code)];
+    if (x.colIsLikert) out.push(fmt(x.rowMean(r.code)));
+    return out;
+  });
+  return el("div", {}, [
+    statTable(head, body),
+    el("p", { class: "tiny muted", text: "Cells show count and row percentage. Rows are respondents; multi-select rows can count one respondent in several rows." })
+  ]);
+}
+
+function renderCrossTabs(rows) {
+  const presets = [
+    ["q1", "q5", "Role \u00d7 confidence interpreting results"],
+    ["q2", "q13", "Setting \u00d7 biggest challenges"],
+    ["q3", "q6", "Tenure \u00d7 ASAM familiarity"],
+    ["q5", "q16", "Confidence \u00d7 how often the laboratory is contacted"]
+  ];
+  const box = el("div");
+  presets.forEach(([r, c, label]) => {
+    box.appendChild(el("div", { style: "margin:0 0 18px" }, [el("h3", { text: label }), xtabTable(rows, r, c)]));
+  });
+
+  const sel = (id, val, onchange) => {
+    const s = el("select", { id, onchange });
+    XTAB_VARS.forEach(v => s.appendChild(el("option", { value: v.id, selected: v.id === val || null, text: v.label })));
+    return s;
+  };
+  const custom = el("div", { class: "card noprint", style: "background:var(--accent-soft)" }, [
+    el("h3", { text: "Build your own cross-tab" }),
+    el("div", { class: "grid2" }, [
+      el("div", {}, [el("label", { class: "fl", for: "xt_row", text: "Rows" }),
+      sel("xt_row", XTAB_ROW, (e) => { XTAB_ROW = e.target.value; renderDashboard(); })]),
+      el("div", {}, [el("label", { class: "fl", for: "xt_col", text: "Columns" }),
+      sel("xt_col", XTAB_COL, (e) => { XTAB_COL = e.target.value; renderDashboard(); })])
+    ]),
+    el("div", { style: "margin-top:12px" }, [xtabTable(rows, XTAB_ROW, XTAB_COL)])
+  ]);
+  box.appendChild(custom);
+  return card("Cross-tabulations", box, "Small cells (n<3) are flagged rather than hidden; treat them as directional only.");
+}
+
+/* ------------------------------ report ------------------------------ */
+
+function renderReport() {
+  const root = $("#reportRoot");
+  root.textContent = "";
+  const rows = filtered();
+  root.appendChild(renderFilters(rows));
+
+  const head = el("section", { class: "card" }, [
+    el("h2", { text: "Clinician Toxicology Survey \u2014 summary report" }),
+    el("p", { class: "small muted", text: "Generated " + new Date().toLocaleString() + " \u00b7 instrument " + INSTRUMENT_ID }),
+    el("p", { class: "small", text: "Records included: " + rows.length + " (" + describeFilters() + ")." }),
+    el("p", { class: "small muted", text: "Descriptive statistics only. No inferential tests are reported; sample sizes in a needs assessment of this size do not support them." })
+  ]);
+  root.appendChild(head);
+
+  if (!rows.length) {
+    root.appendChild(el("div", { class: "card empty" }, [el("p", { text: "Nothing to report for the current filters." })]));
+    return;
+  }
+
+  const k = kpis(rows);
+  root.appendChild(card("Headline numbers", statTable(
+    ["Measure", { label: "Value", num: true }],
+    [["Responses included", k.total], ["Submitted", k.submitted], ["Complete", k.complete],
+    ["Completion rate", k.completionRate + "%"],
+    ["Median completion time", k.medianMinutes === null ? "\u2014" : k.medianMinutes + " min"],
+    ["Mean confidence interpreting results (Q5)", fmt(k.q5.mean) + " / 5 (N=" + k.q5.n + ")"],
+    ["Mean ASAM familiarity (Q6)", fmt(k.q6.mean) + " / 5 (N=" + k.q6.n + ")"]]
+  )));
+
+  const q13 = multiCounts(rows, "q13");
+  root.appendChild(card("Top barriers reported (Q13)", statTable(
+    ["Barrier", { label: "n", num: true }, { label: "% of " + q13.n, num: true }],
+    q13.items.filter(i => i.count).slice(0, 8).map(i => [i.label, i.count, pct(i.count, q13.n) + "%"])
+  )));
+
+  const q17 = multiCounts(rows, "q17");
+  root.appendChild(card("Hardest to access from the laboratory (Q17)", statTable(
+    ["Gap", { label: "n", num: true }, { label: "% of " + q17.n, num: true }],
+    q17.items.filter(i => i.count).slice(0, 8).map(i => [i.label, i.count, pct(i.count, q17.n) + "%"])
+  )));
+
+  const m = matrixSummary(rows, "q18");
+  root.appendChild(card("Most valued proposed capability (Q18)", statTable(
+    ["Capability", { label: "Top-3 picks", num: true }, { label: "Weighted mean", num: true }, { label: "High+Medium", num: true }],
+    m.map(r => [r.label, r.top3, fmt(r.weightedMean), r.highMedPct + "%"])
+  )));
+
+  const q20 = multiCounts(rows, "q20");
+  root.appendChild(card("Stated limits on the laboratory\u2019s role (Q20)", statTable(
+    ["Concern", { label: "n", num: true }, { label: "% of " + q20.n, num: true }],
+    q20.items.filter(i => i.count).map(i => [i.label, i.count, pct(i.count, q20.n) + "%"])
+  )));
+
+  const verb = el("div");
+  ["q22", "q23"].forEach(qid => {
+    const texts = rows.map(r => (r.answers[qid] || {}).text).filter(t => t && t.trim());
+    if (!texts.length) return;
+    verb.appendChild(el("h3", { text: Q[qid].num + ". " + Q[qid].text }));
+    texts.forEach(t => verb.appendChild(el("p", { class: "verbatim", text: t })));
+  });
+  if (verb.childElementCount) root.appendChild(card("In respondents\u2019 own words", verb));
+
+  root.appendChild(el("div", { class: "card noprint" }, [
+    el("button", { class: "btn", type: "button", text: "Print / save as PDF", onclick: () => window.print() })
+  ]));
+}
+
+function describeFilters() {
+  const bits = [];
+  if (FILTERS.role.length) bits.push("role: " + FILTERS.role.map(c => questionLabel("q1", c)).join(", "));
+  if (FILTERS.setting.length) bits.push("setting: " + FILTERS.setting.map(c => questionLabel("q2", c)).join(", "));
+  if (FILTERS.tenure.length) bits.push("tenure: " + FILTERS.tenure.map(c => questionLabel("q3", c)).join(", "));
+  bits.push(FILTERS.status === "all" ? "all records" : FILTERS.status === "complete" ? "complete only" : "submitted only");
+  return bits.join("; ");
+}
+
+/* ------------------------------ data tab ------------------------------ */
+
+function renderData() {
+  const root = $("#dataRoot");
+  root.textContent = "";
+  const rows = filtered();
+
+  root.appendChild(card("Export", [
+    el("p", { class: "small muted", text: "Exports cover the records currently passing the Dashboard filters (" + rows.length + " of " + ALL.length + ")." }),
+    el("div", { class: "row" }, [
+      el("button", { class: "btn", type: "button", text: "Export JSON", onclick: () => downloadBlob("clinician-tox-survey-" + Date.now() + ".json", "application/json", exportJSON(rows)) }),
+      el("button", { class: "btn", type: "button", text: "Export CSV (wide)", onclick: () => downloadBlob("clinician-tox-survey-wide-" + Date.now() + ".csv", "text/csv", wideCSV(rows)) }),
+      el("button", { class: "btn", type: "button", text: "Export CSV (long / tidy)", onclick: () => downloadBlob("clinician-tox-survey-long-" + Date.now() + ".csv", "text/csv", longCSV(rows)) })
+    ]),
+    el("p", { class: "tiny muted", style: "margin-top:.7em", text: "Wide CSV: one row per respondent, one column per option \u2014 best for Excel. Long CSV: one row per answered item \u2014 point Power BI at this one. JSON is the lossless interchange format used for merging." })
+  ]));
+
+  root.appendChild(card("Import and merge", [
+    el("p", { class: "small muted", text: "Accepts a JSON export or a wide CSV export from any copy of this file. Merging is by response ID: newer wins, identical is skipped, and a genuine conflict is kept as a separate forked record rather than overwriting anything." }),
+    el("div", { class: "row" }, [
+      el("button", { class: "btn ghost", type: "button", text: "Choose file to merge", onclick: () => $("#importFile").click() }),
+      el("button", { class: "btn ghost", type: "button", text: "Load 24 demo responses", onclick: loadDemo }),
+      el("button", { class: "btn ghost", type: "button", style: "border-color:var(--bad);color:var(--bad)", text: "Delete all stored responses", onclick: clearAllData })
+    ]),
+    el("p", { id: "mergeReport", class: "small", "aria-live": "polite" })
+  ]));
+
+  const t = el("table", { class: "data" });
+  t.appendChild(el("thead", {}, [el("tr", {}, ["Response ID", "Submitted", "Status", "Complete", "Role", "Setting", "Minutes", ""]
+    .map(h => el("th", { scope: "col", text: h })))]));
+  const tb = el("tbody");
+  rows.slice().sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || ""))).forEach(r => {
+    tb.appendChild(el("tr", {}, [
+      el("td", {}, [el("code", { class: "tiny", text: r.responseId })]),
+      el("td", { text: r.submittedAt ? new Date(r.submittedAt).toLocaleString() : "\u2014" }),
+      el("td", { text: r.status }),
+      el("td", { text: r.complete ? "yes" : "partial" }),
+      el("td", { text: ((r.answers.q1 || {}).selected || []).map(c => questionLabel("q1", c)).join(", ") }),
+      el("td", { text: ((r.answers.q2 || {}).selected || []).map(c => questionLabel("q2", c)).join(", ") }),
+      el("td", { text: r.durationSeconds ? Math.round(r.durationSeconds / 6) / 10 : "\u2014" }),
+      el("td", {}, [el("button", {
+        class: "linkish", type: "button", text: "Delete",
+        onclick: async () => { await Store.remove(r.responseId); await refreshAnalytics(); }
+      })])
+    ]));
+  });
+  t.appendChild(tb);
+  root.appendChild(card("Stored responses",
+    rows.length ? el("div", { class: "tablewrap" }, [t]) : el("p", { class: "small muted", text: "No records yet." })));
+
+  root.appendChild(card("Storage", [
+    el("p", { class: "small", text: "Active storage: " + Store.mode + "." }),
+    el("p", { class: "tiny muted", text: "Data never leaves this browser on its own. To combine responses collected by different people, each person exports JSON and one person imports every file into a single copy of this page." })
+  ]));
+}
+
+async function clearAllData() {
+  if (!window.confirm("Delete every stored response in this browser? Export first if you need them.")) return;
+  await Store.clearAll();
+  await refreshAnalytics();
+  announce("All stored responses deleted.");
+}
+
+/* ------------------------------ tabs and init ------------------------------ */
+
+const TABS = [["tab-survey", "panel-survey"], ["tab-dash", "panel-dash"], ["tab-report", "panel-report"], ["tab-data", "panel-data"]];
+
+function selectTab(tabId) {
+  TABS.forEach(([t, p]) => {
+    const on = t === tabId;
+    const tab = document.getElementById(t);
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+    document.getElementById(p).hidden = !on;
+  });
+  document.body.className = { "tab-survey": "svy", "tab-dash": "dash", "tab-report": "rep", "tab-data": "data" }[tabId];
+  if (tabId === "tab-dash") renderDashboard();
+  if (tabId === "tab-report") renderReport();
+  if (tabId === "tab-data") renderData();
+}
+
+function refreshViews() {
+  if (!document.getElementById("panel-dash").hidden) renderDashboard();
+  if (!document.getElementById("panel-report").hidden) renderReport();
+  if (!document.getElementById("panel-data").hidden) renderData();
+}
+
+async function refreshAnalytics() {
+  ALL = await Store.all();
+  refreshViews();
+}
+
+function wireTabs() {
+  TABS.forEach(([t]) => {
+    const tab = document.getElementById(t);
+    tab.addEventListener("click", () => selectTab(t));
+    tab.addEventListener("keydown", (e) => {
+      const i = TABS.findIndex(([x]) => x === t);
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const next = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length][0];
+        document.getElementById(next).focus();
+        selectTab(next);
+      }
+    });
+  });
+}
+
+function wireImport() {
+  $("#importFile").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    let incoming = [];
+    try {
+      if (file.name.toLowerCase().endsWith(".json") || text.trim().startsWith("{")) {
+        const parsed = JSON.parse(text);
+        incoming = Array.isArray(parsed) ? parsed : (parsed.responses || []);
+      } else {
+        incoming = recordsFromWideCSV(text);
+      }
+    } catch (err) {
+      $("#mergeReport").textContent = "Could not read that file: " + err.message;
+      e.target.value = "";
+      return;
+    }
+    const rep = await mergeRecords(incoming);
+    await refreshAnalytics();
+    const msg = "Merged " + incoming.length + " record(s): " + rep.inserted + " new, " + rep.updated +
+      " updated, " + rep.skipped + " already current, " + rep.forked + " kept as conflict copies, " +
+      rep.rejected + " rejected.";
+    const node = $("#mergeReport");
+    if (node) node.textContent = msg;
+    announce(msg);
+    e.target.value = "";
+  });
+}
+
+function wireSurveyControls() {
+  $("#btnSubmit").addEventListener("click", () => submitResponse(false));
+  $("#btnClearDraft").addEventListener("click", () => {
+    if (!window.confirm("Clear the answers on this unsubmitted draft?")) return;
+    Store.dropDraft();
+    draft = newDraft();
+    showErrors = false;
+    renderSurvey();
+    $("#saveNote").textContent = "Draft cleared.";
+    announce("Draft cleared.");
+  });
+  $("#interviewerMode").addEventListener("change", (e) => {
+    const panel = $("#interviewerPanel");
+    panel.hidden = !e.target.checked;
+    draft.mode = e.target.checked ? "interviewer" : "respondent";
+    panel.textContent = "";
+    if (!e.target.checked) return;
+    panel.appendChild(el("section", { class: "card" }, [
+      el("h2", { text: "Interviewer guide" }),
+      el("h3", { text: "Purpose" }),
+      el("p", { class: "small", text: INTERVIEWER_TEXT.purpose }),
+      el("h3", { text: "Interviewer instructions" }),
+      el("ul", { class: "small" }, INTERVIEWER_TEXT.instructions.map(i => el("li", { text: i }))),
+      el("h3", { text: "Introduction script" }),
+      el("p", { class: "small", text: INTERVIEWER_TEXT.introScript })
+    ]));
+  });
+  window.addEventListener("visibilitychange", () => { if (document.hidden) saveDraftNow(); });
+  window.addEventListener("beforeunload", saveDraftNow);
+}
+
+async function init() {
+  const mode = await Store.init();
+  if (mode !== "indexeddb") {
+    const b = $("#storageBanner");
+    b.hidden = false;
+    b.textContent = mode === "localstorage"
+      ? "Using browser localStorage (IndexedDB is unavailable, which is normal when this file is opened directly from disk). Responses still persist in this browser \u2014 export regularly."
+      : "This browser is blocking persistent storage, so responses are held in memory only. Export before closing the tab.";
+  }
+  draft = Store.loadDraft() || newDraft();
+  if (!draft.startedAt) draft.startedAt = Date.now();
+  draft.answers = draft.answers || {};
+  wireTabs();
+  wireImport();
+  wireSurveyControls();
+  renderSurvey();
+  if (draft.mode === "interviewer") {
+    const box = $("#interviewerMode");
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+  }
+  await refreshAnalytics();
+  if (Store.loadDraft()) $("#saveNote").textContent = "Resumed your saved draft.";
+}
+
+document.addEventListener("DOMContentLoaded", init);
+
+/* ------------------------------------------------------------------
+   Synthetic demo data, for trying the dashboard before real responses
+   exist. Clearly marked as demo via the collector label.
+------------------------------------------------------------------ */
+
+function seededRandom(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+function demoResponses(n) {
+  const rnd = seededRandom(20260917);
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const pickSome = (arr, min, max) => {
+    const k = min + Math.floor(rnd() * (max - min + 1));
+    const pool = [...arr];
+    const out = [];
+    while (out.length < k && pool.length) out.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+    return out;
+  };
+  const codes = (q) => q.options.filter(o => !o.other).map(o => o.code);
+  const out = [];
+  const verbatim22 = [
+    "Faster definitive turnaround so the result still matters at the next visit.",
+    "One place to see the whole testing history instead of separate PDFs.",
+    "Stop paying for panels nobody reads. Test with a question in mind.",
+    "Make cutoffs and detection windows available at the point of ordering.",
+    "Let me reach an actual toxicologist the same day I get a confusing result."
+  ];
+  const verbatim23 = [
+    "Ask how testing affects the therapeutic relationship, not just the chart.",
+    "Nothing further \u2014 this covered the workflow issues well.",
+    "Consider the cost burden on cash-pay patients in rural programs."
+  ];
+
+  for (let i = 0; i < n; i++) {
+    const start = Date.now() - (n - i) * 3600e3;
+    const conf = 1 + Math.floor(rnd() * 5);
+    const fam = Math.max(1, Math.min(5, conf + (rnd() < 0.5 ? -1 : 1)));
+    const rec = {
+      schemaVersion: SCHEMA_VERSION, instrument: INSTRUMENT_ID,
+      responseId: "demo-" + String(i + 1).padStart(3, "0"),
+      deviceId: "demo-device", collector: "demo-data",
+      createdAt: new Date(start).toISOString(),
+      submittedAt: new Date(start + 480e3).toISOString(),
+      updatedAt: new Date(start + 480e3).toISOString(),
+      status: "submitted", complete: true,
+      durationSeconds: 300 + Math.floor(rnd() * 360),
+      contact: { name: "", email: "", organization: "" },
+      answers: {}
+    };
+    const A = rec.answers;
+    A.q1 = { selected: pickSome(codes(Q.q1), 1, 2), other: "" };
+    A.q2 = { selected: pickSome(codes(Q.q2), 1, 3), other: "" };
+    A.q3 = { value: pick(codes(Q.q3)), other: "" };
+    A.q4 = { selected: pickSome(codes(Q.q4), 1, 4), other: "" };
+    A.q5 = { value: conf };
+    A.q6 = { value: fam };
+    A.q7 = { selected: pickSome(codes(Q.q7), 1, 4), other: "" };
+    A.q8a = { selected: pickSome(codes(Q.q8a), 1, 3), other: "" };
+    A.q8b = { selected: pickSome(codes(Q.q8b), 1, 3), other: "" };
+    A.q9 = { value: pick(codes(Q.q9)), other: "" };
+    A.q10 = { selected: pickSome(codes(Q.q10), 1, 2), other: "" };
+    A.q11 = { rows: Object.fromEntries(Q.q11.rows.map(r => [r.code, rnd() < 0.7 ? "yes" : (rnd() < 0.6 ? "no" : "na")])) };
+    A.q12a = { selected: pickSome(codes(Q.q12a), 1, 3), other: "" };
+    A.q12b = { selected: pickSome(FOLLOWUPS.q12b.options.filter(o => !o.other).map(o => o.code), 1, 3), other: "" };
+    A.q13 = { selected: pickSome(codes(Q.q13), 2, 3), other: "" };
+    const payer = pick(["yes", "yes", "no", "not_sure_na"]);
+    A.q14 = { value: payer, other: "" };
+    if (payer === "yes") A.q14b = { selected: pickSome(FOLLOWUPS.q14b.options.map(o => o.code), 1, 3), other: "" };
+    A.q15 = { value: pick(["no", "no", "yes", "not_sure_na"]), other: "" };
+    const comm = pick(["frequently", "occasionally", "rarely", "rarely", "never"]);
+    A.q16 = { value: comm, other: "" };
+    if (comm === "rarely" || comm === "never") {
+      A.q16b = { selected: pickSome(FOLLOWUPS.q16b.options.filter(o => !o.other).map(o => o.code), 1, 2), other: "" };
+    }
+    A.q17 = { selected: pickSome(codes(Q.q17).filter(c => c !== "nothing_difficult"), 2, 3), other: "" };
+    A.q18 = {
+      rows: Object.fromEntries(Q.q18.rows.map(r => [r.code, pick(["high", "high", "medium", "medium", "low", "no_value"])])),
+      top3: pickSome(Q.q18.rows.map(r => r.code), 3, 3)
+    };
+    A.q19 = { value: pick(["strong_fit", "partial_fit", "partial_fit", "does_not_fit", "not_sure"]), other: "" };
+    A.q19b = { selected: pickSome(FOLLOWUPS.q19b.options.filter(o => !o.other).map(o => o.code), 1, 3), other: "" };
+    A.q20 = { selected: pickSome(codes(Q.q20).filter(c => c !== "no_significant_concern"), 1, 3), other: "" };
+    A.q21 = { value: pick(codes(Q.q21)), other: "" };
+    if (rnd() < 0.55) A.q22 = { text: pick(verbatim22) };
+    if (rnd() < 0.35) A.q23 = { text: pick(verbatim23) };
+    rec.requiredAnswered = REQUIRED_IDS.filter(id => {
+      const a = A[id]; if (!a) return false;
+      if (a.selected) return a.selected.length > 0;
+      if (a.rows) return Object.keys(a.rows).length > 0;
+      return a.value !== undefined && a.value !== null && a.value !== "";
+    }).length;
+    rec.requiredTotal = REQUIRED_IDS.length;
+    rec.complete = rec.requiredAnswered === rec.requiredTotal;
+    rec.contentHash = hashRecord(rec);
+    out.push(rec);
+  }
+  return out;
+}
+
+async function loadDemo() {
+  const rep = await mergeRecords(demoResponses(24));
+  await refreshAnalytics();
+  const node = $("#mergeReport");
+  const msg = "Demo data loaded: " + rep.inserted + " new, " + rep.skipped + " already present.";
+  if (node) node.textContent = msg;
+  announce(msg);
+}
+</script>
+</body>
+</html>
